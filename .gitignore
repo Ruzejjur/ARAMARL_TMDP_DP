@@ -1,3 +1,7 @@
+# User defined ignored files
+Garbage/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

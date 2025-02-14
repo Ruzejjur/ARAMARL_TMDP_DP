@@ -2,7 +2,7 @@
 This module implements several environments, i.e., the simulators in which agents will interact and learn.
 Any environment is characterized by the following two methods:
  * step : receives the actions taken by the agents, and returns the new state of the simulator and the rewards
- perceived by each agent, amongst other things.
+          perceived by each agent, amongst other things.
  * reset : sets the simulator at the initial state.
 """
 
