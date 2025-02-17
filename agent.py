@@ -286,6 +286,58 @@ class FPLearningAgent(Agent):
         """Returns the Dirichlet distribution of the agent"""
         return self.Dir
 
+class FPLearningAgent_DP(Agent):
+    """
+    A Q-learning agent that treats the other player as a level 0 agent.
+    She learns from other's actions in a bayesian way.
+    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    """
+
+    def __init__(self, action_space, enemy_action_space, n_states, rewards, epsilon, gamma):
+        Agent.__init__(self, action_space)
+
+        self.n_states = n_states
+        self.epsilon = epsilon
+        self.gamma = gamma
+        self.enemy_action_space = enemy_action_space
+        self.rewards = rewards
+        # This is the value function V(s,b)
+        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
+        # Parameters of the Dirichlet distribution used to model the other agent
+        # Initialized using a uniform prior
+        self.Dir = np.ones(len(self.enemy_action_space))
+        
+        # Initialize best action from the value function update, which is used for the as action chosen in the
+
+    def act(self, obs=None):
+        """An epsilon-greedy policy"""
+        if np.random.rand() < self.epsilon:
+            return choice(self.action_space)
+        else:
+            #print('obs ', obs)
+            #print(self.Q[obs].shape)
+            #print(self.Dir.shape)
+            #print(np.dot( self.Q[obs], self.Dir/np.sum(self.Dir) ).shape)
+            return self.action_space[ np.argmax( np.dot( self.V[obs], self.Dir/np.sum(self.Dir) ) ) ]
+
+    def update(self, obs, actions, rewards, new_obs):
+        """The vanilla Q-learning update rule"""
+        _, a1 = actions
+        r0, _ = rewards
+
+        self.Dir[a1] += 1 # Update beliefs about adversary
+
+        aux = np.dot(self.V[new_obs], self.Dir/np.sum(self.Dir))
+        self.V[obs, a1] = r0 + self.gamma*aux
+    
+    def get_V_function(self):
+        """Returns the Q-function of the agent"""
+        return self.Q
+    
+    def get_Dirichlet(self):
+        """Returns the Dirichlet distribution of the agent"""
+        return self.Dir
+
 class FPQwForgetAgent(Agent):
     """
     A Q-learning agent that treats the other player as a level 0 agent.
@@ -590,7 +642,99 @@ class Level2QAgent_fixed(Agent):
         # Finally we update the supported agent's Q-function
         self.QA[obs, a, b] = (1 - self.alphaA)*self.QA[obs, a, b] + self.alphaA*(rA + self.gammaA*np.max(mean_values_QA_p_A_b))
 
+class Level2QAgent_DP_fixed(Agent):
+    """
+    A value iteration agent that treats the other player as a level 1 agent.
+    She learns from other's actions, estimating their value function.
+    She represents value function in a tabular fashion, i.e., using a matrix V.
+    """
 
+    def __init__(self, action_space, enemy_action_space, n_states, epsilon, gamma):
+        Agent.__init__(self, action_space)
+
+        self.n_states = n_states
+        self.epsilonA = epsilon
+        self.epsilonB = self.epsilonA
+        self.gammaA = gamma
+        self.gammaB = self.gammaA
+        #self.gammaB = 0
+
+        self.action_space = action_space
+        self.enemy_action_space = enemy_action_space
+
+        ## Other agent
+        self.enemy = FPLearningAgent_DP(self.enemy_action_space, self.action_space, self.n_states,
+                                        epsilon=self.epsilonB, gamma=self.gammaB)
+
+        # This is the Q-function Q_A(s, a, b) (i.e, the supported DM Q-function)
+        self.QA = np.zeros([self.n_states, len(self.action_space), len(self.enemy_action_space)])
+
+
+    def act(self, obs=None):
+        """An epsilon-greedy policy"""
+
+        if np.random.rand() < self.epsilonA:
+            return choice(self.action_space)
+        else:
+            # Adversary's Q-function
+            QB = self.enemy.get_Q_function()
+            
+            # Adversary's belief about DM's action (in form of weights)
+            Dir_B = self.enemy.get_Dirichlet()
+            # Normalize Dir_B
+            Dir_B = Dir_B/np.sum(Dir_B)
+            
+            # TODO: Test for more states than 1
+            # Calculate the mean value of adversarys Q-function with respect to Dir_B
+            mean_values_QB_p_B_a = np.dot(QB[obs, :, :], Dir_B)
+            
+            # Calculate argmx b of the mean values of adversarys Q-function
+            Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
+            
+            # Calculate DM's belief about adversary's action using epsilon-greedy policy
+            p_A_b = np.ones(len(self.enemy_action_space))
+            p_A_b.fill(self.epsilonA/(len(self.enemy_action_space)-1))
+            p_A_b[Adversary_best_action] = 1 - self.epsilonA
+            
+            # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
+            mean_values_QA_p_A_b = np.tensordot(self.QA[obs, :, :], p_A_b, axes=([1], [0]))
+            
+            return Adversary_best_action
+
+    def update(self, obs, actions, rewards, new_obs):
+        """The vanilla Q-learning update rule"""
+        a, b = actions
+        rA, rB = rewards
+
+        self.enemy.update(obs, [b,a], [rB, rA], new_obs )
+
+        # We obtain opponent's next action using Q_B
+        
+        # Adversary's Q-function
+        QB = self.enemy.get_Q_function()
+        
+        # Adversary's belief about DM's action (in form of weights)
+        Dir_B = self.enemy.get_Dirichlet()
+        # Normalize Dir_B
+        Dir_B = Dir_B/np.sum(Dir_B)
+        
+        # TODO: Test for more states than 1
+        # Calculate the mean value of adversarys Q-function with respect to Dir_B
+        mean_values_QB_p_B_a = np.dot(QB[new_obs, :, :], Dir_B)
+        
+        # Calculate argmx b of the mean values of adversarys Q-function
+        Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
+        
+        # Calculate DM's belief about adversary's action using epsilon-greedy policy
+        p_A_b = np.ones(len(self.enemy_action_space))
+        p_A_b.fill(self.epsilonA/(len(self.enemy_action_space)-1))
+        p_A_b[Adversary_best_action] = 1 - self.epsilonA
+        
+        # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
+        mean_values_QA_p_A_b = np.tensordot(self.QA[new_obs, :, :], p_A_b, axes=([1], [0]))
+        
+        # Finally we update the supported agent's Q-function
+        self.QA[obs, a, b] = (1 - self.alphaA)*self.QA[obs, a, b] + self.alphaA*(rA + self.gammaA*np.max(mean_values_QA_p_A_b))
         
 class Level2QAgentSoftmax(Level2QAgent):
     """

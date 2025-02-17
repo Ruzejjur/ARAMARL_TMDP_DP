@@ -74,40 +74,43 @@ class AdvRw():
         self._policy = np.asarray([0.5, 0.5])
         self._learning_rate = 0.25
         self._p = p  # probability for the neutral environment
+        self.rewards = np.array([[50,-50],[-50,50]]) # defining rewards matrix with dimensions num_actions x num_adversary_actions
 
+        if self._mode == 'friend':
+            self.reward_table = np.array([[-50,50],[50,-50]])
+        elif self._mode == 'adversary':
+            self.reward_table = np.array([[+50,-50],[-50,+50]])
+
+        # TODO: Redefine the rewards for nutral case using a table
+        # elif self._mode == 'neutral':
+        #     box = np.random.rand() < self._p
+        #     if int(box) == action_agent:
+        #         reward = +50
+        #     else:
+        #         reward = -50 
+    
+    def get_reward_table(self):
+        return self.reward_table
+    
     def reset(self):
         # self._policy = np.asarray([0.5, 0.5])
         return
+    
+    def act(self):
+        return np.argmin(self._policy)
 
-    def step(self, action):
+    def step(self, action_agent, action_adversary):
+        
+        reward = self.reward_table[action_agent, action_adversary]
 
-        if self._mode == 'friend':
-            if np.argmax(self._policy) == action:
-                reward = +50
-            else:
-                reward = -50
-        elif self._mode == 'adversary':
-            if np.argmax(self._policy) == action:
-                reward = -50
-            else:
-                reward = +50
-        elif self._mode == 'neutral':
-            box = np.random.rand() < self._p
-            if int(box) == action:
-                reward = +50
-            else:
-                reward = -50
-
-        self._policy = (self._learning_rate * np.array([1.0-action, action])
+        self._policy = (self._learning_rate * np.array([1.0-action_agent, action_agent])
                         + (1.0-self._learning_rate) * self._policy)
         self._policy /= np.sum(self._policy)
-
-        # print('---')
-        #print('r', reward)
-        #print('p', self._policy)
-        # print('---')
-
+        
         return None, (reward, -reward), True, None
+   
+
+        
 
 
 class AdvRw2():
