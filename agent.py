@@ -466,10 +466,12 @@ class ExpSmoother(Agent):
 
     def update(self, obs, actions, rewards, new_obs):
         """Update the exp smoother"""
-        a0, a1 = actions
-        OHE = np.array([[1,0],[0,1]])
+        a0, _ = actions
+        # TODO: Apply more advanced method for onehot encoding based on self.action_space
+        OHE = np.array([[1,0],[0,1]]) # One hot encoding of actions
 
-        self.prob = self.alpha*self.prob + (1-self.alpha)*OHE[a1] # Update beliefs about DM
+        self.prob = (1-self.alpha)*self.prob + self.alpha*OHE[a0] # Update beliefs about DM
+        
 
 ##
 class Level2QAgent(Agent):
