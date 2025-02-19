@@ -70,9 +70,7 @@ class AdvRw():
 
     def __init__(self, mode='friend', p=0.5):
         self._mode = mode
-        # adversary estimation of our action
-        self._policy = np.asarray([0.5, 0.5])
-        self._learning_rate = 0.25
+
         self._p = p  # probability for the neutral environment
 
         if self._mode == 'friend':
@@ -101,28 +99,18 @@ class AdvRw():
     def reset(self):
         # self._policy = np.asarray([0.5, 0.5])
         return
-    
-    def act(self):
-        return np.argmin(self._policy)
 
     def step(self, action_agent, action_adversary):
         
         reward_DM = self.reward_table_DM[action_agent, action_adversary]
         reward_ADV = self.reward_table_ADV[action_agent, action_adversary]
-
-        self._policy = (self._learning_rate * np.array([1.0-action_agent, action_agent])
-                        + (1.0-self._learning_rate) * self._policy)
-        self._policy /= np.sum(self._policy)
         
         return None, (reward_DM, reward_ADV), True, None
    
 
-        
-
-
 class AdvRw2():
     """
-    Friend or Foe modified to model adversary separately..
+    Friend or Foe modified to model adversary separately.
     """
 
     def __init__(self, max_steps, payout=50, batch_size=1):
