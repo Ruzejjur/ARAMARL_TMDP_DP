@@ -74,12 +74,15 @@ class AdvRw():
         self._policy = np.asarray([0.5, 0.5])
         self._learning_rate = 0.25
         self._p = p  # probability for the neutral environment
-        self.rewards = np.array([[50,-50],[-50,50]]) # Defining supported agents rewards matrix with dimensions num_actions x num_adversary_actions
 
         if self._mode == 'friend':
-            self.reward_table = np.array([[-50,50],[50,-50]])
+            self.reward_table_DM = np.array([[+50,-50],[-50,+50]])
+            self.reward_table_ADV = np.array([[+50,-50],[-50,+50]])
         elif self._mode == 'adversary':
-            self.reward_table = np.array([[+50,-50],[-50,+50]])
+            self.reward_table_DM = np.array([[+50,-50],[-50,+50]])
+            self.reward_table_ADV = np.array([[-50,+50],[+50,-50]])
+        else: 
+            raise ValueError('Invalid environment mode.')
 
         # TODO: Redefine the rewards for nutral case using a table
         # elif self._mode == 'neutral':
@@ -89,8 +92,11 @@ class AdvRw():
         #     else:
         #         reward = -50 
     
-    def get_reward_table(self):
-        return self.reward_table
+    def get_reward_table_DM(self):
+        return self.reward_table_DM
+    
+    def get_reward_table_ADV(self):
+        return self.reward_table_ADV
     
     def reset(self):
         # self._policy = np.asarray([0.5, 0.5])
@@ -101,13 +107,14 @@ class AdvRw():
 
     def step(self, action_agent, action_adversary):
         
-        reward = self.reward_table[action_agent, action_adversary]
+        reward_DM = self.reward_table_DM[action_agent, action_adversary]
+        reward_ADV = self.reward_table_ADV[action_agent, action_adversary]
 
         self._policy = (self._learning_rate * np.array([1.0-action_agent, action_agent])
                         + (1.0-self._learning_rate) * self._policy)
         self._policy /= np.sum(self._policy)
         
-        return None, (reward, -reward), True, None
+        return None, (reward_DM, reward_ADV), True, None
    
 
         
