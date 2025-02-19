@@ -74,7 +74,7 @@ class AdvRw():
         self._policy = np.asarray([0.5, 0.5])
         self._learning_rate = 0.25
         self._p = p  # probability for the neutral environment
-        self.rewards = np.array([[50,-50],[-50,50]]) # defining rewards matrix with dimensions num_actions x num_adversary_actions
+        self.rewards = np.array([[50,-50],[-50,50]]) # Defining supported agents rewards matrix with dimensions num_actions x num_adversary_actions
 
         if self._mode == 'friend':
             self.reward_table = np.array([[-50,50],[50,-50]])

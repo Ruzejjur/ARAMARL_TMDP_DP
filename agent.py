@@ -67,7 +67,7 @@ class RandomAgent(Agent):
 class IndQLearningAgent(Agent):
     """
     A Q-learning agent that treats other players as part of the environment (independent Q-learning).
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     Intended to use as a baseline
     """
 
@@ -110,7 +110,7 @@ class IndQLearningAgentSoftmax(IndQLearningAgent):
 class Exp3QLearningAgent(Agent):
     """
     A Q-learning agent that treats other players as part of the environment (independent Q-learning).
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     Intended to use as a baseline
     """
 
@@ -149,7 +149,7 @@ class Exp3QLearningAgent(Agent):
 class PHCLearningAgent(Agent):
     """
     A Q-learning agent that treats other players as part of the environment (independent Q-learning).
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     Intended to use as a baseline
     """
 
@@ -189,7 +189,7 @@ class PHCLearningAgent(Agent):
 class WoLFPHCLearningAgent(Agent):
     """
     A Q-learning agent that treats other players as part of the environment (independent Q-learning).
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     Intended to use as a baseline
     """
 
@@ -240,7 +240,7 @@ class FPLearningAgent(Agent):
     """
     A Q-learning agent that treats the other player as a level 0 agent.
     She learns from other's actions in a bayesian way.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
@@ -282,67 +282,55 @@ class FPLearningAgent(Agent):
         """Returns the Q-function of the agent"""
         return self.Q
     
-    def get_Dirichlet(self):
+    def get_Belief(self):
         """Returns the Dirichlet distribution of the agent"""
         return self.Dir
 
-class FPLearningAgent_DP(Agent):
+class Level0DPAgent(Agent):
     """
-    A Q-learning agent that treats the other player as a level 0 agent.
-    She learns from other's actions in a bayesian way.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    A myopic agent which maximizes imidiate reward based on belief about other agents actions.
     """
 
-    def __init__(self, action_space, enemy_action_space, n_states, rewards, epsilon, gamma):
+    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma,reward_table, system_model):
         Agent.__init__(self, action_space)
 
         self.n_states = n_states
         self.epsilon = epsilon
         self.gamma = gamma
         self.enemy_action_space = enemy_action_space
-        self.rewards = rewards
-        # This is the value function V(s,b)
-        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
+        self.reward_table = reward_table
+        # Value iteration does not impement learning rate, leaving for coherence with definition of other agents
+        self.learning_rate = None
+        
+        # This is the value function V(b)
+        self.V = np.zeros(len(self.enemy_action_space))
+        
         # Parameters of the Dirichlet distribution used to model the other agent
         # Initialized using a uniform prior
         self.Dir = np.ones(len(self.enemy_action_space))
-        
-        # Initialize best action from the value function update, which is used for the as action chosen in the
 
     def act(self, obs=None):
-        """An epsilon-greedy policy"""
-        if np.random.rand() < self.epsilon:
-            return choice(self.action_space)
-        else:
-            #print('obs ', obs)
-            #print(self.Q[obs].shape)
-            #print(self.Dir.shape)
-            #print(np.dot( self.Q[obs], self.Dir/np.sum(self.Dir) ).shape)
-            return self.action_space[ np.argmax( np.dot( self.V[obs], self.Dir/np.sum(self.Dir) ) ) ]
+        """ Select the action that maximizes the imidiate reward. """
+        # * No need for epsilon-greedy strategy in exploitation of the myopic agent as it does not facilitate learning        
+        selected_action = np.argmax(np.tensordot(self.reward_table, self.Dir/np.sum(self.Dir), axes=([1], [0])))
+
+        return selected_action
 
     def update(self, obs, actions, rewards, new_obs):
-        """The vanilla Q-learning update rule"""
-        _, a1 = actions
-        r0, _ = rewards
-
-        self.Dir[a1] += 1 # Update beliefs about adversary
-
-        aux = np.dot(self.V[new_obs], self.Dir/np.sum(self.Dir))
-        self.V[obs, a1] = r0 + self.gamma*aux
+        """ Update weights of the agents belief about the other agents action selection. """
+        _, b = actions
+        
+        self.Dir[b] += 1 # Update beliefs about adversary
     
-    def get_V_function(self):
-        """Returns the Q-function of the agent"""
-        return self.Q
-    
-    def get_Dirichlet(self):
-        """Returns the Dirichlet distribution of the agent"""
+    def get_Belief(self):
+        """ Returns the Dirichlet distribution of the agents belief about other agents actions. """
         return self.Dir
 
 class FPQwForgetAgent(Agent):
     """
     A Q-learning agent that treats the other player as a level 0 agent.
     She learns from other's actions in a bayesian way, plus a discount to ignore distant observations.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
     # TODO: Check if this is correct
     # !!! So the level-0 agent is meant the adversary who is assumed to simply choose actions according to p(b)?
@@ -488,7 +476,7 @@ class Level2QAgent(Agent):
     """
     A Q-learning agent that treats the other player as a level 1 agent.
     She learns from other's actions, estimating their Q function.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
@@ -550,7 +538,7 @@ class Level2QAgent_fixed(Agent):
     """
     A Q-learning agent that treats the other player as a level 1 agent.
     She learns from other's actions, estimating their Q function.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
@@ -586,26 +574,18 @@ class Level2QAgent_fixed(Agent):
             QB = self.enemy.get_Q_function()
             
             # Adversary's belief about DM's action (in form of weights)
-            Dir_B = self.enemy.get_Dirichlet()
+            Dir_B = self.enemy.get_Belief()
             # Normalize Dir_B
             Dir_B = Dir_B/np.sum(Dir_B)
             
             # TODO: Test for more states than 1
             # Calculate the mean value of adversarys Q-function with respect to Dir_B
-            mean_values_QB_p_B_a = np.dot(QB[obs, :, :], Dir_B)
+            mean_values_QB_p_A_b = np.dot(QB[obs, :, :], Dir_B)
             
-            # Calculate argmx b of the mean values of adversarys Q-function
-            Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
+            # Calculate argmx a of the mean values of adversarys Q-function
+            Agents_best_action = np.argmax(mean_values_QB_p_A_b)
             
-            # Calculate DM's belief about adversary's action using epsilon-greedy policy
-            p_A_b = np.ones(len(self.enemy_action_space))
-            p_A_b.fill(self.epsilonA/(len(self.enemy_action_space)-1))
-            p_A_b[Adversary_best_action] = 1 - self.epsilonA
-            
-            # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
-            mean_values_QA_p_A_b = np.tensordot(self.QA[obs, :, :], p_A_b, axes=([1], [0]))
-            
-            return Adversary_best_action
+            return Agents_best_action
 
     def update(self, obs, actions, rewards, new_obs):
         """The vanilla Q-learning update rule"""
@@ -620,7 +600,7 @@ class Level2QAgent_fixed(Agent):
         QB = self.enemy.get_Q_function()
         
         # Adversary's belief about DM's action (in form of weights)
-        Dir_B = self.enemy.get_Dirichlet()
+        Dir_B = self.enemy.get_Belief()
         # Normalize Dir_B
         Dir_B = Dir_B/np.sum(Dir_B)
         
@@ -641,15 +621,95 @@ class Level2QAgent_fixed(Agent):
         
         # Finally we update the supported agent's Q-function
         self.QA[obs, a, b] = (1 - self.alphaA)*self.QA[obs, a, b] + self.alphaA*(rA + self.gammaA*np.max(mean_values_QA_p_A_b))
+        
+class Level1DPAgent(Agent):
+    """
+    A value iteration agent that treats the other player as a level 0 agent.
+    She learns from other's actions, estimating their value function.
+    She represents value function in a tabular form, i.e., using a matrix.
+    """
 
-class Level2QAgent_DP_fixed(Agent):
+    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, reward_table, system_model):
+        Agent.__init__(self, action_space)
+
+        self.n_states = n_states
+        self.alphaA = learning_rate
+        self.alphaB = learning_rate
+        self.epsilonA = epsilon
+        self.epsilonB = self.epsilonA
+        self.gammaA = gamma
+        self.gammaB = self.gammaA
+        self.reward_table = reward_table
+        self.system_model = system_model
+        #self.gammaB = 0
+
+        self.action_space = action_space
+        self.enemy_action_space = enemy_action_space
+
+        ## Other agent
+        self.enemy = Level0DPAgent(self.enemy_action_space, self.action_space, self.n_states,
+            learning_rate=self.alphaB, epsilon=self.epsilonB, gamma=self.gammaB, reward_table=self.reward_table, system_model=None)
+
+        # This is the value function V(s,a)
+        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
+        
+        # This is the inner term of value function for calculation of value in various contexts: 
+        #   1. Update of the value function.
+        #   2. Calculation of the value function for the action selection.
+        #   3. Constraction of epsilon greedy for upper level agent
+
+    def extract_epsilon_greedy(self): 
+        """Extracts the epsilon-greedy policy from the level-0 agent"""
+        other_agent_optimal_action = self.enemy.act(None)
+        
+        eps_greedy = np.ones(len(self.enemy_action_space)) * self.epsilonA / (len(self.enemy_action_space) - 1)
+        eps_greedy[other_agent_optimal_action] = 1 - self.epsilonA
+        
+        return eps_greedy
+    def act(self, obs):
+        
+        eps_greedy_policy_level_0_agent = self.extract_epsilon_greedy()
+        
+        aux1 = np.tensordot(self.V, eps_greedy_policy_level_0_agent, axes=([1], [0]))
+        
+        # TODO: subset of self.system model is a bxs matrix adjust after definition of system model in the environment
+        aux2 = np.tensordot(aux1, self.system_model[obs,:,:,:], axes=([0], [3]))
+        
+        # TODO: If aux2 is redefined modify this also
+        aux3 = np.tensordot(self.reward_table[obs, :, :] + self.gammaB*aux2, eps_greedy_policy_level_0_agent, axes=([1], [0]))
+        
+        selected_action = np.argmax(aux3)
+        
+        return selected_action
+        
+    def update(self, obs, actions, rewards, new_obs):
+        """Level-1 value iteration update"""
+        # Extract actions of the DM and the Adversary respectively
+        a, b = actions
+        
+        # Update the level-0 agent (DM) with the observed actions of the adversary
+        # This only updates the belief or level-0 agent (DM) about the adversarys actions
+        self.enemy.update(None, [None, b], None, None)
+        
+        eps_greedy_policy_level_0_agent = self.extract_epsilon_greedy()
+        
+        aux1 = np.tensordot(self.V, eps_greedy_policy_level_0_agent, axes=([1], [0]))
+        
+        # TODO: subset of self.system model is a bxs matrix adjust after definition of system model in the environment
+        aux2 = np.tensordot(aux1, self.system_model[obs,a,:,:], axes=([0], [3]))
+        
+        # Update the value function of the level-1 agent (ADV)
+        self.V[obs, a] = np.max(self.reward_table[obs, a, :] + self.gammaB*aux2)
+        
+
+class Level2DPAgent(Agent):
     """
     A value iteration agent that treats the other player as a level 1 agent.
     She learns from other's actions, estimating their value function.
-    She represents value function in a tabular fashion, i.e., using a matrix V.
+    She represents value function in a tabular form, i.e., using a matrix V.
     """
 
-    def __init__(self, action_space, enemy_action_space, n_states, epsilon, gamma):
+    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, reward_table, system_model):
         Agent.__init__(self, action_space)
 
         self.n_states = n_states
@@ -657,90 +717,76 @@ class Level2QAgent_DP_fixed(Agent):
         self.epsilonB = self.epsilonA
         self.gammaA = gamma
         self.gammaB = self.gammaA
-        #self.gammaB = 0
+        # Value iteration does not impement learning rate, leaving for coherence with definition of other agents
+        self.learning_rate = None
 
         self.action_space = action_space
         self.enemy_action_space = enemy_action_space
+        
+        # Environment atributes know to the agent
+        self.reward_table = reward_table
+        self.system_model = system_model
 
         ## Other agent
-        self.enemy = FPLearningAgent_DP(self.enemy_action_space, self.action_space, self.n_states,
-                                        epsilon=self.epsilonB, gamma=self.gammaB)
+        self.enemy = Level1DPAgent(self.enemy_action_space, self.action_space, self.n_states, learning_rate=None,
+                                   epsilon=self.epsilonB, gamma=self.gammaB, reward_table = self.reward_table,
+                                   system_model = self.system_model)
 
-        # This is the Q-function Q_A(s, a, b) (i.e, the supported DM Q-function)
-        self.QA = np.zeros([self.n_states, len(self.action_space), len(self.enemy_action_space)])
+        # This is the value function V(s, b) (i.e, the supported DM value function)
+        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
+        
+    def extract_epsilon_greedy(self): 
+        """Extracts the epsilon-greedy policy from the level-1 agent for all possible states."""
+        other_agent_chosen_action_for_each_state = np.zeros(self.n_states)
+        for obs in range(self.n_states):
+            other_agent_chosen_action_for_each_state[obs] = self.enemy.act(obs)
+        
+        eps_greedy = np.ones((self.n_states, len(self.enemy_action_space))) * self.epsilonB / (len(self.enemy_action_space) - 1)
+        
+        for obs in range(self.n_states):
+            eps_greedy[obs, other_agent_chosen_action_for_each_state[obs]] = 1 - self.epsilonB
+        
+        return eps_greedy
 
+    def act(self, obs):
 
-    def act(self, obs=None):
-        """An epsilon-greedy policy"""
-
-        if np.random.rand() < self.epsilonA:
-            return choice(self.action_space)
-        else:
-            # Adversary's Q-function
-            QB = self.enemy.get_Q_function()
+            eps_greedy_policy_level_1_agent = self.extract_epsilon_greedy()
             
-            # Adversary's belief about DM's action (in form of weights)
-            Dir_B = self.enemy.get_Dirichlet()
-            # Normalize Dir_B
-            Dir_B = Dir_B/np.sum(Dir_B)
+            aux1 = np.sum(self.V * eps_greedy_policy_level_1_agent, axis=1)
             
-            # TODO: Test for more states than 1
-            # Calculate the mean value of adversarys Q-function with respect to Dir_B
-            mean_values_QB_p_B_a = np.dot(QB[obs, :, :], Dir_B)
+            # TODO: subset of self.system model is a bxs matrix adjust after definition of system model in the environment
+            aux2 = np.tensordot(aux1, self.system_model[obs,:,:,:], axes=([0], [3]))
             
-            # Calculate argmx b of the mean values of adversarys Q-function
-            Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
+            # TODO: If aux2 is redefined modify this also
+            aux3 = np.tensordot(self.reward_table[obs, :, :] + self.gammaA*aux2, eps_greedy_policy_level_1_agent[obs], axes=([2], [0]))
             
-            # Calculate DM's belief about adversary's action using epsilon-greedy policy
-            p_A_b = np.ones(len(self.enemy_action_space))
-            p_A_b.fill(self.epsilonA/(len(self.enemy_action_space)-1))
-            p_A_b[Adversary_best_action] = 1 - self.epsilonA
+            selected_action = np.argmax(aux3)
             
-            # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
-            mean_values_QA_p_A_b = np.tensordot(self.QA[obs, :, :], p_A_b, axes=([1], [0]))
-            
-            return Adversary_best_action
+            return selected_action
 
     def update(self, obs, actions, rewards, new_obs):
-        """The vanilla Q-learning update rule"""
+        """Update of the value function of level-2 agent"""
+        # Extract actions of the DM and the Adversary respectively
         a, b = actions
-        rA, rB = rewards
+        
+        self.enemy.update(obs, [a,b], None, None)
 
-        self.enemy.update(obs, [b,a], [rB, rA], new_obs )
+        eps_greedy_policy_level_1_agent = self.extract_epsilon_greedy()
+        
+        aux1 = np.sum(self.V * eps_greedy_policy_level_1_agent, axis=1)
+        
+        # TODO: subset of self.system model is a axs matrix adjust after definition of system model in the environment
+        aux2 = np.tensordot(aux1, self.system_model[obs,:,b,:], axes=([0], [3]))
+        
+        # Update the value function of the level-2 agent (DM)
+        self.V[obs, b] = np.max(self.reward_table[obs, :, b] + self.gammaA*aux2)
 
-        # We obtain opponent's next action using Q_B
-        
-        # Adversary's Q-function
-        QB = self.enemy.get_Q_function()
-        
-        # Adversary's belief about DM's action (in form of weights)
-        Dir_B = self.enemy.get_Dirichlet()
-        # Normalize Dir_B
-        Dir_B = Dir_B/np.sum(Dir_B)
-        
-        # TODO: Test for more states than 1
-        # Calculate the mean value of adversarys Q-function with respect to Dir_B
-        mean_values_QB_p_B_a = np.dot(QB[new_obs, :, :], Dir_B)
-        
-        # Calculate argmx b of the mean values of adversarys Q-function
-        Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
-        
-        # Calculate DM's belief about adversary's action using epsilon-greedy policy
-        p_A_b = np.ones(len(self.enemy_action_space))
-        p_A_b.fill(self.epsilonA/(len(self.enemy_action_space)-1))
-        p_A_b[Adversary_best_action] = 1 - self.epsilonA
-        
-        # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
-        mean_values_QA_p_A_b = np.tensordot(self.QA[new_obs, :, :], p_A_b, axes=([1], [0]))
-        
-        # Finally we update the supported agent's Q-function
-        self.QA[obs, a, b] = (1 - self.alphaA)*self.QA[obs, a, b] + self.alphaA*(rA + self.gammaA*np.max(mean_values_QA_p_A_b))
         
 class Level2QAgentSoftmax(Level2QAgent):
     """
     A Q-learning agent that treats the other player as a level 1 agent.
     She learns from other's actions, estimating their Q function.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
@@ -758,7 +804,7 @@ class Level3QAgent(Agent):
     """
     A Q-learning agent that treats the other player as a level 2 agent.
     She learns from other's actions, estimating their Q function.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
@@ -814,7 +860,7 @@ class Level3QAgentMixExp(Agent):
     level 2 agent and a level 1 agent, with different probabilities, that
     are updated dynamically using an exponential smoother.
     She learns from others' actions, estimating their Q function.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
@@ -895,7 +941,7 @@ class Level3QAgentMixDir(Agent):
     level 2 agent and a level 1 agent, with different probabilities, that
     are updated dynamically in a Bayesian way.
     She learns from others' actions, estimating their Q function.
-    She represents Q-values in a tabular fashion, i.e., using a matrix Q.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
