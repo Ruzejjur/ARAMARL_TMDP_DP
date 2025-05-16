@@ -531,126 +531,144 @@ class SimpleCoin():
 
 class CoinGame():
     """
-    Coin Game from LOLA paper, played id
+    Coin game environment for two agents on a grid. Who batlle for two coins.
     """
 
-    def __init__(self, max_steps=5, batch_size=1, tabular=True):
-        self.max_steps = max_steps
-        self.batch_size = batch_size
-        self.available_actions = np.array([0, 1, 2, 3])  # four directions to move. Agents pick up coins by moving onto the position where the coin is located
-        self.step_count = 0
-        self.N = 3
-        self.available_actions = np.array(
-            [0, 1])
-        self.available_actions_DM = np.array(
-            [0, 1, 2, 3])
-        self.available_actions_Adv = np.array(
-            [0, 1, 2, 3])
-        #self.state = np.zeros([4, self.N, self.N]) # blue player, red player, blue coin, red coin positions as OHE over grid.
-
-        self.blue_player = [1, 0]
-        self.red_player = [1, 2]
+    def __init__(self, max_steps=5, tabular=True):
         
-        if (np.random.rand() < 0.0):
-            self.blue_coin = [0, 1]
-            self.red_coin = [2, 1]
-        else:
-            self.blue_coin = [2, 1]
-            self.red_coin = [0, 1]
+        self.max_steps = max_steps  # Maximum number of steps per episode
+        self.step_count = 0  # Counter for steps taken in the current episode
+        self.N = 3  # Number of rows and columns in a square grid
+        self.available_actions_DM = np.array([0, 1, 2, 3])  # Actions available to the decision-maker
+        self.available_actions_Adv = np.array([0, 1, 2, 3])  # Actions available to the adversary
 
-        self.tabular = tabular
+        self.blue_player = [1, 0]  # Initial position [row, col] of the blue player (DM)
+        self.red_player = [1, 2]  # Initial position [row, col] of the red player (ADV)
+        
+        self.blue_coin = [2, 1] # Initial position [row, col] of the blue coin
+        self.red_coin = [0, 1] # Initial position [row, col] of the red coin
 
     def get_state(self):
-        o = np.zeros([4, self.N, self.N])
-        o[0,self.blue_player[0], self.blue_player[1]] = 1
-        o[1,self.red_player[0], self.red_player[1]] = 1
-        o[2,self.blue_coin[0], self.blue_coin[1]] = 1
-        o[3,self.red_coin[0], self.red_coin[1]] = 1
+        """
+        Returns a unique integer representing the full state of the environment,
+        based on the positions of the blue player, red player, blue coin, and red coin.
 
-        if self.tabular:
-            p1 =  self.blue_player[0] + self.N*self.blue_player[1]
-            p2 =  self.red_player[0] + self.N*self.red_player[1]
-            p3 =  self.blue_coin[0] + self.N*self.blue_coin[1]
-            p4 =  self.red_coin[0] + self.N*self.red_coin[1]
-            return int(p1 + (self.N)**2 * p2 + ((self.N)**2)**2 * p3 + ((self.N)**2)**3 * p4)
+        Each entity’s 2D position on an N×N grid is flattened and combined using
+        ensuring every state has a unique ID.
+        """
+        # TODO: Fix this
+        # !!! WARNING: This method needs to be rewritten as the number of states initialized in the Q function does not correspond
+        # !!!           to the number of states resulting from this method. Also as the conin in step method is reset to [-1, -1] when collected, 
+        # !!!           negative indices are pased into the Q function, nupmpy threats those as finding the element starting from the end of the array.
+        # !!!           Meaning a random Q value is being updated instead of separate Q value for the case where the coin is collected. 
+        # ** Solution: Use something like grid.expand in R to generate all possible combinations of positions of the players and the coins. 
+        # **             Then pass the index of the corresponding state to the Q function.
+        base = self.N ** 2  # Total number of grid positions (used as radix base)
 
-        return o
+        # Flatten 2D positions into 1D indices (column-major order)
+        p1 = self.blue_player[0] + self.N * self.blue_player[1]  # Blue player's position
+        p2 = self.red_player[0] + self.N * self.red_player[1]    # Red player's position
+        p3 = self.blue_coin[0] + self.N * self.blue_coin[1]      # Blue coin's position
+        p4 = self.red_coin[0] + self.N * self.red_coin[1]        # Red coin's position
+
+        # Combine all positions into one unique integer using base-N² encoding
+        return int(p1 + base * p2 + base**2 * p3 + base**3 * p4)
+
+
 
     def reset(self):
-        self.step_count = 0
+        """
+        Resets the environment to its initial state:
+        - Step counter is set to 0
+        - Player and coin positions are restored to their starting values
+        """
+        
+        self.step_count = 0  # Reset step counter to start a new episode
 
-        # initial positions
-        self.blue_player = [1, 0]
-        self.red_player = [1, 2]
+        # Set initial positions for the agents
+        self.blue_player = [1, 0]  # Starting position of the blue player
+        self.red_player = [1, 2]   # Starting position of the red player
 
-        if (np.random.rand() < 0.0):
-            self.blue_coin = [0, 1]
-            self.red_coin = [2, 1]
-        else:
-            self.blue_coin = [2, 1]
-            self.red_coin = [0, 1]
+        # Set initial positions for the coins
+        self.blue_coin = [2, 1]    # Starting position of the blue coin
+        self.red_coin = [0, 1]     # Starting position of the red coin
 
-        return
+        return  # Explicit return of None (can be omitted)
 
     def step(self, action):
-        ac0, ac1 = action
+        """
+        Executes one environment step given the actions of both agents.
 
+        - Updates agent positions based on chosen actions
+        - Handles coin collection and assigns corresponding rewards
+        - Returns the new state, rewards for each agent, and whether the episode is done
+        """
+        
+        # Unpack actions for both agents
+        ac0, ac1 = action  # ac0: blue player's action, ac1: red player's action
+
+        # Increment step count for this episode
         self.step_count += 1
 
-        reward_blue, reward_red = 0, 0
+        # Initialize step rewards
+        reward_blue, reward_red = -0.1, -0.1
 
-        # agents move
-        if ac0 == 0: # up
+        # --- Blue agent's movement ---
+        if ac0 == 0:  # up
             self.blue_player[0] = np.maximum(self.blue_player[0] - 1, 0)
-        elif ac0 == 1: # right
-            self.blue_player[1] = np.minimum(self.blue_player[1] + 1, self.N-1)
-        elif ac0 == 2: # down
-            self.blue_player[0] = np.minimum(self.blue_player[0] + 1, self.N-1)
-        else:
+        elif ac0 == 1:  # right
+            self.blue_player[1] = np.minimum(self.blue_player[1] + 1, self.N - 1)
+        elif ac0 == 2:  # down
+            self.blue_player[0] = np.minimum(self.blue_player[0] + 1, self.N - 1)
+        else:  # left
             self.blue_player[1] = np.maximum(self.blue_player[1] - 1, 0)
 
-        if ac1 == 0: # up
+        # --- Red agent's movement ---
+        if ac1 == 0:  # up
             self.red_player[0] = np.maximum(self.red_player[0] - 1, 0)
-        elif ac1 == 1: # right
-            self.red_player[1] = np.minimum(self.red_player[1] + 1, self.N-1)
-        elif ac1 == 2: # down
-            self.red_player[0] = np.minimum(self.red_player[0] + 1, self.N-1)
-        else:
+        elif ac1 == 1:  # right
+            self.red_player[1] = np.minimum(self.red_player[1] + 1, self.N - 1)
+        elif ac1 == 2:  # down
+            self.red_player[0] = np.minimum(self.red_player[0] + 1, self.N - 1)
+        else:  # left
             self.red_player[1] = np.maximum(self.red_player[1] - 1, 0)
 
-        # check coins
-        # if either agent picks coin, +1 for him
+        # --- Coin collection logic ---
+
+        # If blue coin collected by blue player
         if self.blue_player == self.blue_coin:
             if self.red_player == self.blue_coin:
-                reward_blue += 0.5
+                reward_blue += 0.5  # Shared pickup
             else:
-                reward_blue += 1
-            self.blue_coin = [-1, -1]
+                reward_blue += 1 # Coin collected by blue player only
+            self.blue_coin = [-1, -1]  # Remove coin from grid
 
+        # If red coin collected by red player
         if self.red_player == self.red_coin:
             if self.blue_player == self.red_coin:
-                reward_red += 0.5
+                reward_red += 0.5  # Shared pickup
             else:
-                reward_red += 1
+                reward_red += 1 # Coin collected by red player only
             self.red_coin = [-1, -1]
 
+        # If red coin collected by blue player
         if self.blue_player == self.red_coin:
             if self.red_player == self.red_coin:
-                reward_blue += 0.5
+                reward_blue += 0.5  # Shared pickup
             else:
-                reward_blue += 1
+                reward_blue += 1 # Coin collected by blue player only
             self.red_coin = [-1, -1]
-        
+
+        # If blue coin collected by red player
         if self.red_player == self.blue_coin:
             if self.blue_player == self.blue_coin:
-                reward_red += 0.5
+                reward_red += 0.5  # Shared pickup
             else:
-                reward_red += 1
+                reward_red += 1 # Coin collected by red player only
             self.blue_coin = [-1, -1]
-            
-        
-        
-        
+
+        # Check if episode is done
         done = self.step_count == self.max_steps
-        
+
+        # Return new state, rewards, and done flag
         return self.get_state(), np.array([reward_blue, reward_red]), done

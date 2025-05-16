@@ -7,15 +7,31 @@ from agent import IndQLearningAgentSoftmax, Level2QAgent
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jax.experimental import optimizers
-from jax.experimental import stax
-from jax.experimental.stax import Dense, Relu, LogSoftmax
+# from jax.experimental import optimizers 
+# from jax.experimental import minmax
+# from jax.experimental import stax
+# from jax.experimental.stax import Dense, Relu, LogSoftmax
 from numpy.random import choice
 from scipy.special import softmax
 from scipy.signal import convolve
 
 
 def stable_softmax(x):
+    """
+    Compute the numerically stable softmax of input array x.
+
+    The softmax function converts input scores (logits) into a probability distribution,
+    ensuring that all output values are between 0 and 1 and sum to 1.
+
+    To avoid numerical overflow or underflow caused by large exponentials,
+    this implementation subtracts the maximum value of x before exponentiation.
+
+    Parameters:
+        x (array-like): Input vector of real numbers (e.g., logits or scores).
+
+    Returns:
+        numpy.ndarray: Softmax-transformed probability vector.
+    """
     z = x - max(x)
     numerator = np.exp(z)
     denominator = np.sum(numerator)

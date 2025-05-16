@@ -7,8 +7,6 @@ This module implements several agents. An agent is characterized by two methods:
 import numpy as np
 from numpy.random import choice
 
-from engine import RMG
-
 
 class Agent():
     """
@@ -78,6 +76,7 @@ class IndQLearningAgent(Agent):
         self.alpha = learning_rate
         self.epsilon = epsilon
         self.gamma = gamma
+        
         # This is the Q-function Q(s, a)
         self.Q = -10*np.ones([self.n_states, len(self.action_space)])
 
@@ -290,7 +289,7 @@ class Level0DPAgent(Agent):
     """
     A myopic agent which maximizes imidiate reward based on belief about other agents actions.
     """
-
+    # TODO: Finish this implementation
     def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma,reward_table, system_model):
         Agent.__init__(self, action_space)
 
@@ -333,7 +332,7 @@ class FPQwForgetAgent(Agent):
     She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
     # TODO: Check if this is correct
-    # !!! So the level-0 agent is meant the adversary who is assumed to simply choose actions according to p(b)?
+    # !!! So the level-0 agent the adversary who is assumed to simply choose actions according to p(b)?
     # !!! I was under impresion that the level-0 is DM who keeps track of Q function dependent on Q(a,b) which utilizes p(b)
     # !!! as DM's belief about opponent's policy.
     # * Note: Seems to be actualy fine, because this is used wit n_states = 1, so this is the sateless variant.
