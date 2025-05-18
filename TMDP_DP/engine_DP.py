@@ -541,19 +541,22 @@ class CoinGame():
         self.N = size_square_grid  # Number of rows and columns in a square grid
         self.available_actions_DM = np.array([0, 1, 2, 3])  # Actions available to the decision-maker
         self.available_actions_Adv = np.array([0, 1, 2, 3])  # Actions available to the adversary
-
-        self.blue_player = [2, 0]  # Initial position [row, col] of the blue player (DM)
-        self.red_player = [2, 3]  # Initial position [row, col] of the red player (ADV)
         
-        self.blue_coin = [0, 2] # Initial position [row, col] of the blue coin
-        self.red_coin = [3, 2] # Initial position [row, col] of the red coin
+        self.blue_player_execution_prob = 0.8 # Probability of executing the intended action for the blue player
+        self.red_player_execution_prob = 0.8 # Probability of executing the intended action for the red player
+        
+        self.blue_player = np.array([5, 0])  # Initial position [row, col] of the blue player (DM)
+        self.red_player = np.array([5, 10])  # Initial position [row, col] of the red player (ADV)
+        
+        self.blue_coin = np.array([0, 5]) # Initial position [row, col] of the blue coin
+        self.red_coin = np.array([10, 5]) # Initial position [row, col] of the red coin
         
         # Seve initial position of players and coins for reseting the environment
-        self.blue_player_initial = [2, 0]  # Initial position [row, col] of the blue player (DM)
-        self.red_player_initial = [2, 3]  # Initial position [row, col] of the red player (ADV)
+        self.blue_player_initial = self.blue_player.copy()  # Initial position [row, col] of the blue player (DM)
+        self.red_player_initial = self.red_player.copy()  # Initial position [row, col] of the red player (ADV)
         
-        self.blue_coin_initial = [0, 2] # Initial position [row, col] of the blue coin
-        self.red_coin_initial = [3, 2] # Initial position [row, col] of the red coin
+        self.blue_coin_initial = self.blue_coin.copy() # Initial position [row, col] of the blue coin
+        self.red_coin_initial = self.red_coin.copy() # Initial position [row, col] of the red coin
         
         self.done = False # Flag to indicate if episode is done
         
@@ -566,14 +569,6 @@ class CoinGame():
         Each entity’s 2D position on an N×N grid is flattened and combined using radix encoding,
         ensuring every state has a unique ID.
         """
-        # TODO: First remove location of the coin from the state as it is unchanging and try to preserve the coding of the states.
-        # TODO: Fix this
-        # !!! WARNING: This method needs to be rewritten as the number of states initialized in the Q function does not correspond
-        # !!!           to the number of states resulting from this method. Also as the conin in step method is reset to [-1, -1] when collected, 
-        # !!!           negative indices are pased into the Q function, nupmpy threats those as finding the element starting from the end of the array.
-        # !!!           Meaning a random Q value is being updated instead of separate Q value for the case where the coin is collected. 
-        # ** Solution: Use something like grid.expand in R to generate all possible combinations of positions of the players and the coins. 
-        # **             Then pass the index of the corresponding state to the Q function.
         
         base = self.N ** 2  # Total number of grid positions (used as radix base)
 
@@ -594,6 +589,8 @@ class CoinGame():
         """
         
         self.step_count = 0  # Reset step counter to start a new episode
+        
+        self.done = False # Reset done flag to indicate the episode is not finished
 
         # Set initial positions for the agents
         self.blue_player = self.blue_player_initial  # Starting position of the blue player
@@ -601,9 +598,9 @@ class CoinGame():
 
         # Set initial positions for the coins
         self.blue_coin = self.blue_coin_initial   # Starting position of the blue coin
-        self.red_coin = self.blue_coin_initial   # Starting position of the red coin
+        self.red_coin = self.red_coin_initial   # Starting position of the red coin
 
-        return  # Explicit return of None (can be omitted)
+        return 
 
     def step(self, action):
         """
@@ -622,69 +619,78 @@ class CoinGame():
 
         # Initialize step rewards
         reward_blue, reward_red = -0.1, -0.1
+        
+        # --- Player movement ---
+        
+        # -- Blue player movement --
+        
+        # Define movement deltas for up, right, down, left
+        deltas = np.array([(-1, 0), (0, 1), (1, 0), (0, -1)])
 
-        # --- Blue agent's movement ---
-        if ac0 == 0:  # up
-            self.blue_player[0] = np.maximum(self.blue_player[0] - 1, 0)
-        elif ac0 == 1:  # right
-            self.blue_player[1] = np.minimum(self.blue_player[1] + 1, self.N - 1)
-        elif ac0 == 2:  # down
-            self.blue_player[0] = np.minimum(self.blue_player[0] + 1, self.N - 1)
-        else:  # left
-            self.blue_player[1] = np.maximum(self.blue_player[1] - 1, 0)
+        # Randomly select the actual action based on the execution probability of the blue player
+        if np.random.rand() < self.blue_player_execution_prob:
+            actual_action = ac0
+        else:
+            alternatives = [a for a in self.available_actions_DM if a != ac0]
+            actual_action = np.random.choice(alternatives)
 
-        # --- Red agent's movement ---
-        if ac1 == 0:  # up
-            self.red_player[0] = np.maximum(self.red_player[0] - 1, 0)
-        elif ac1 == 1:  # right
-            self.red_player[1] = np.minimum(self.red_player[1] + 1, self.N - 1)
-        elif ac1 == 2:  # down
-            self.red_player[0] = np.minimum(self.red_player[0] + 1, self.N - 1)
-        else:  # left
-            self.red_player[1] = np.maximum(self.red_player[1] - 1, 0)
+        # Apply movement
+        new_position = self.blue_player + deltas[actual_action]
+        new_position = np.clip(new_position, 0, self.N - 1)
+        self.blue_player = new_position
+        
+
+        ## -- Red player movement --
+        
+        # Randomly select the actual action based on the execution probability of the blue player
+        if np.random.rand() < self.red_player_execution_prob:
+            actual_action = ac1
+        else:
+            alternatives = [a for a in self.available_actions_Adv if a != ac1]
+            actual_action = np.random.choice(alternatives)
+
+        # Apply movement
+        new_position = self.red_player + deltas[actual_action]
+        new_position = np.clip(new_position, 0, self.N - 1)
+        self.red_player = new_position
 
         # --- Coin collection logic ---
 
-        # If blue coin collected by blue player
-        if self.blue_player == self.blue_coin:
-            if self.red_player == self.blue_coin:
-                reward_blue = -1  # Shared pickup
-            else:
-                reward_blue = 1 # Coin collected by blue player only
-                reward_red = -0.1
-            self.done = True # When coin is collected, the episode ends
-            
+        # Determine all relevant events in this step
+        blue_on_blue_coin = np.array_equal(self.blue_player, self.blue_coin)
+        red_on_red_coin = np.array_equal(self.red_player, self.red_coin)
 
-        # If red coin collected by red player
-        if self.red_player == self.red_coin:
-            if self.blue_player == self.red_coin:
-                reward_red = -1  # Shared pickup
-            else:
-                reward_red = 1 # Coin collected by red player only
-                reward_blue = -0.1
-            self.done = True # When coin is collected, the episode ends
-            
+        # For shared pickups
+        red_also_on_blue_coin = np.array_equal(self.red_player, self.blue_coin)
+        blue_also_on_red_coin = np.array_equal(self.blue_player, self.red_coin)
 
-        # If red coin collected by blue player
-        if self.blue_player == self.red_coin:
-            if self.red_player == self.red_coin:
-                reward_blue = -0.1  # Shared pickup
-            else:
-                reward_blue = -0.1 # Coin collected by blue player only
-                reward_red = -1
-            self.done = True # When coin is collected, the episode ends
+        # Scenario 1: Both collect their respective (different) coins
+        if blue_on_blue_coin and not red_also_on_blue_coin and \
+        red_on_red_coin and not blue_also_on_red_coin:
+            reward_blue = 2  # e.g., +1 for own coin, -1 for opponent scoring
+            reward_red = 2   # e.g., +1 for own coin, -1 for opponent scoring
+            self.done = True
+        # Scenario 2: Only Blue player collects blue coin (or shares it)
+        elif blue_on_blue_coin:
+            if red_also_on_blue_coin: # Shared pickup of blue coin
+                reward_blue = -10
+                reward_red = 5
+                # reward_red remains -0.1
+            else: # Blue collects blue coin alone
+                reward_blue = 10
+                reward_red = -10
+            self.done = True
+        # Scenario 3: Only Red player collects red coin (or shares it)
+        elif red_on_red_coin:
+            if blue_also_on_red_coin: # Shared pickup of red coin
+                reward_red = -10
+                reward_blue = 5
+                # reward_blue remains -0.1
+            else: # Red collects red coin alone
+                reward_red = 10
+                reward_blue = -10
+            self.done = True
             
-
-        # If blue coin collected by red player
-        if self.red_player == self.blue_coin:
-            if self.blue_player == self.blue_coin:
-                reward_red = -0.1  # Shared pickup
-            else:
-                reward_red = -0.1 # Coin collected by red player only
-                reward_blue = -1
-            self.done = True # When coin is collected, the episode ends
-            
-
         # Check if episode is done
         if self.step_count == self.max_steps:
             self.done = True
