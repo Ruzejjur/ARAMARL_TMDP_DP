@@ -534,19 +534,29 @@ class CoinGame():
     Coin game environment for two agents on a grid. Who batlle for two coins.
     """
 
-    def __init__(self, max_steps=5, tabular=True):
+    def __init__(self, max_steps=5, size_square_grid=4):
         
         self.max_steps = max_steps  # Maximum number of steps per episode
         self.step_count = 0  # Counter for steps taken in the current episode
-        self.N = 3  # Number of rows and columns in a square grid
+        self.N = size_square_grid  # Number of rows and columns in a square grid
         self.available_actions_DM = np.array([0, 1, 2, 3])  # Actions available to the decision-maker
         self.available_actions_Adv = np.array([0, 1, 2, 3])  # Actions available to the adversary
 
-        self.blue_player = [1, 0]  # Initial position [row, col] of the blue player (DM)
-        self.red_player = [1, 2]  # Initial position [row, col] of the red player (ADV)
+        self.blue_player = [2, 0]  # Initial position [row, col] of the blue player (DM)
+        self.red_player = [2, 3]  # Initial position [row, col] of the red player (ADV)
         
-        self.blue_coin = [2, 1] # Initial position [row, col] of the blue coin
-        self.red_coin = [0, 1] # Initial position [row, col] of the red coin
+        self.blue_coin = [0, 2] # Initial position [row, col] of the blue coin
+        self.red_coin = [3, 2] # Initial position [row, col] of the red coin
+        
+        # Seve initial position of players and coins for reseting the environment
+        self.blue_player_initial = [2, 0]  # Initial position [row, col] of the blue player (DM)
+        self.red_player_initial = [2, 3]  # Initial position [row, col] of the red player (ADV)
+        
+        self.blue_coin_initial = [0, 2] # Initial position [row, col] of the blue coin
+        self.red_coin_initial = [3, 2] # Initial position [row, col] of the red coin
+        
+        self.done = False # Flag to indicate if episode is done
+        
 
     def get_state(self):
         """
@@ -570,11 +580,9 @@ class CoinGame():
         # Flatten 2D positions into 1D indices (column-major order)
         p1 = self.blue_player[0] + self.N * self.blue_player[1]  # Blue player's position
         p2 = self.red_player[0] + self.N * self.red_player[1]    # Red player's position
-        p3 = self.blue_coin[0] + self.N * self.blue_coin[1]      # Blue coin's position
-        p4 = self.red_coin[0] + self.N * self.red_coin[1]        # Red coin's position
-
-        # Combine all positions into one unique integer using base-N² encoding
-        return int(p1 + base * p2 + base**2 * p3 + base**3 * p4)
+        
+        
+        return int(p1 + base * p2)
 
 
 
@@ -588,12 +596,12 @@ class CoinGame():
         self.step_count = 0  # Reset step counter to start a new episode
 
         # Set initial positions for the agents
-        self.blue_player = [1, 0]  # Starting position of the blue player
-        self.red_player = [1, 2]   # Starting position of the red player
+        self.blue_player = self.blue_player_initial  # Starting position of the blue player
+        self.red_player = self.red_player_initial  # Starting position of the red player
 
         # Set initial positions for the coins
-        self.blue_coin = [2, 1]    # Starting position of the blue coin
-        self.red_coin = [0, 1]     # Starting position of the red coin
+        self.blue_coin = self.blue_coin_initial   # Starting position of the blue coin
+        self.red_coin = self.blue_coin_initial   # Starting position of the red coin
 
         return  # Explicit return of None (can be omitted)
 
@@ -640,37 +648,46 @@ class CoinGame():
         # If blue coin collected by blue player
         if self.blue_player == self.blue_coin:
             if self.red_player == self.blue_coin:
-                reward_blue += 0.5  # Shared pickup
+                reward_blue = -1  # Shared pickup
             else:
-                reward_blue += 1 # Coin collected by blue player only
+                reward_blue = 1 # Coin collected by blue player only
+                reward_red = -0.1
+            self.done = True # When coin is collected, the episode ends
             
 
         # If red coin collected by red player
         if self.red_player == self.red_coin:
             if self.blue_player == self.red_coin:
-                reward_red += 0.5  # Shared pickup
+                reward_red = -1  # Shared pickup
             else:
-                reward_red += 1 # Coin collected by red player only
+                reward_red = 1 # Coin collected by red player only
+                reward_blue = -0.1
+            self.done = True # When coin is collected, the episode ends
             
 
         # If red coin collected by blue player
         if self.blue_player == self.red_coin:
             if self.red_player == self.red_coin:
-                reward_blue += 0.5  # Shared pickup
+                reward_blue = -0.1  # Shared pickup
             else:
-                reward_blue += 1 # Coin collected by blue player only
+                reward_blue = -0.1 # Coin collected by blue player only
+                reward_red = -1
+            self.done = True # When coin is collected, the episode ends
             
 
         # If blue coin collected by red player
         if self.red_player == self.blue_coin:
             if self.blue_player == self.blue_coin:
-                reward_red += 0.5  # Shared pickup
+                reward_red = -0.1  # Shared pickup
             else:
-                reward_red += 1 # Coin collected by red player only
+                reward_red = -0.1 # Coin collected by red player only
+                reward_blue = -1
+            self.done = True # When coin is collected, the episode ends
             
 
         # Check if episode is done
-        done = self.step_count == self.max_steps
+        if self.step_count == self.max_steps:
+            self.done = True
 
         # Return new state, rewards, and done flag
-        return self.get_state(), np.array([reward_blue, reward_red]), done
+        return self.get_state(), np.array([reward_blue, reward_red]), self.done
