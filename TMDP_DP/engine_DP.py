@@ -534,37 +534,51 @@ class CoinGame():
     Coin game environment for two agents on a grid. Who batlle for two coins.
     """
 
-    def __init__(self, max_steps=5, size_square_grid=4):
+    def __init__(self, max_steps=5, size_square_grid=4, push_distance=1):
         
         self.max_steps = max_steps  # Maximum number of steps per episode
         self.step_count = 0  # Counter for steps taken in the current episode
         self.N = size_square_grid  # Number of rows and columns in a square grid
-        self.available_actions_DM = np.array([0, 1, 2, 3])  # Actions available to the decision-maker
-        self.available_actions_Adv = np.array([0, 1, 2, 3])  # Actions available to the adversary
+        
+        self.push_distance = push_distance # Distance to push the players away from each other
+        
+        self.available_actions_DM = np.array([0, 1, 2, 3, 4])  # Actions available to the decision-maker
+        self.available_actions_Adv = np.array([0, 1, 2, 3, 4])  # Actions available to the adversary
         
         self.blue_player_execution_prob = 0.8 # Probability of executing the intended action for the blue player
         self.red_player_execution_prob = 0.8 # Probability of executing the intended action for the red player
         
-        self.blue_player = np.array([5, 0])  # Initial position [row, col] of the blue player (DM)
-        self.red_player = np.array([5, 10])  # Initial position [row, col] of the red player (ADV)
+        # Player positions
+        self.blue_player = np.array([self.N // 2, 0]) # Centered start at left edge
+        self.red_player = np.array([self.N // 2, self.N -1])   # Centered start at right edge
         
-        self.blue_coin = np.array([0, 5]) # Initial position [row, col] of the blue coin
-        self.red_coin = np.array([10, 5]) # Initial position [row, col] of the red coin
+        self.coin_1 = np.array([0, self.N // 2]) # Initial position [row, col] of the coin 1
+        self.coin_2 = np.array([self.N - 1, self.N // 2]) # Initial position [row, col] of the coin 2
+        
+        # Keep track of whether coins are still available on the map
+        self.coin1_available = True
+        self.coin2_available = True
         
         # Seve initial position of players and coins for reseting the environment
         self.blue_player_initial = self.blue_player.copy()  # Initial position [row, col] of the blue player (DM)
         self.red_player_initial = self.red_player.copy()  # Initial position [row, col] of the red player (ADV)
         
-        self.blue_coin_initial = self.blue_coin.copy() # Initial position [row, col] of the blue coin
-        self.red_coin_initial = self.red_coin.copy() # Initial position [row, col] of the red coin
+        self.coin_1_initial = self.coin_1.copy() # Initial position [row, col] of the coin 1
+        self.coin_2_initial = self.coin_2.copy() # Initial position [row, col] of the coin 2
         
         self.done = False # Flag to indicate if episode is done
+        
+        # Track who collected which coin
+        self.blue_collected_coin1 = False
+        self.blue_collected_coin2 = False
+        self.red_collected_coin1 = False
+        self.red_collected_coin2 = False
         
 
     def get_state(self):
         """
         Returns a unique integer representing the full state of the environment,
-        based on the positions of the blue player, red player, blue coin, and red coin.
+        based the positions of the blue player, red player, coin availability, and collected coin counts.
 
         Each entity’s 2D position on an N×N grid is flattened and combined using radix encoding,
         ensuring every state has a unique ID.
@@ -576,8 +590,37 @@ class CoinGame():
         p1 = self.blue_player[0] + self.N * self.blue_player[1]  # Blue player's position
         p2 = self.red_player[0] + self.N * self.red_player[1]    # Red player's position
         
+        # Coin availability on map
+        c1_avail_val = 1 if self.coin1_available else 0
+        c2_avail_val = 1 if self.coin2_available else 0
         
-        return int(p1 + base * p2)
+        # How many coins each player has collected *so far*
+        # (0, 1, or 2 - though game ends at 2 for one player)
+        # For state simplicity, let's use: 0 = 0 coins, 1 = 1 coin, 2 = 2 coins (winning state)
+        blue_coins_collected_count = int(self.blue_collected_coin1) + int(self.blue_collected_coin2)
+        red_coins_collected_count = int(self.red_collected_coin1) + int(self.red_collected_coin2)
+        
+        # Radix encoding:
+        # Max values: p_flat=N*N-1, c_avail=1, collected_count=2
+        # Order: P1_pos, P2_pos, C1_avail, C2_avail, P1_coll_count, P2_coll_count
+        base_pos = self.N * self.N
+        base_avail = 2 # (0 or 1)
+        base_coll_count = 3 # (0, 1, or 2)
+
+        state_id = p1
+        state_id = state_id * base_pos + p2
+        state_id = state_id * base_avail + c1_avail_val
+        state_id = state_id * base_avail + c2_avail_val
+        state_id = state_id * base_coll_count + blue_coins_collected_count
+        state_id = state_id * base_coll_count + red_coins_collected_count
+        
+        return int(state_id)
+    
+    @property
+    def n_states(self):
+        # (N*N for P1_pos) * (N*N for P2_pos) * (2 for C1_avail) * (2 for C2_avail) *
+        # (3 for P1_coll_count) * (3 for P2_coll_count)
+        return (self.N**4) * (2**2) * (3**2)
 
 
 
@@ -597,10 +640,24 @@ class CoinGame():
         self.red_player = self.red_player_initial  # Starting position of the red player
 
         # Set initial positions for the coins
-        self.blue_coin = self.blue_coin_initial   # Starting position of the blue coin
-        self.red_coin = self.red_coin_initial   # Starting position of the red coin
+        self.coin_1 = self.coin_1_initial   # Starting position of the coin 1
+        self.coin_2 = self.coin_2_initial   # Starting position of the coin 2
+        
+        # Reset coin availability
+        self.coin1_available = True
+        self.coin2_available = True
+        
+        # Reset coin collection flags for each player
+        self.blue_collected_coin1 = False
+        self.blue_collected_coin2 = False
+        self.red_collected_coin1 = False
+        self.red_collected_coin2 = False
 
         return 
+    
+    def _are_players_adjacent(self, player1_pos, player2_pos):
+        # Only checks if the players are horizontaly or verticaly adjacent, not diagonally
+        return np.sum(np.abs(player1_pos - player2_pos)) == 1
 
     def step(self, action):
         """
@@ -620,78 +677,140 @@ class CoinGame():
         # Initialize step rewards
         reward_blue, reward_red = -0.1, -0.1
         
-        # --- Player movement ---
+        # --- Store original positions for push logic ---
+        original_blue_pos = self.blue_player.copy()
+        original_red_pos = self.red_player.copy()
         
-        # -- Blue player movement --
+        # Check if players are adjacent 
+        players_are_adjacent = self._are_players_adjacent(original_blue_pos, original_red_pos)
+        
+        # --- Effective actions ---
         
         # Define movement deltas for up, right, down, left
         deltas = np.array([(-1, 0), (0, 1), (1, 0), (0, -1)])
 
         # Randomly select the actual action based on the execution probability of the blue player
         if np.random.rand() < self.blue_player_execution_prob:
-            actual_action = ac0
+            actual_action_blue = ac0
         else:
             alternatives = [a for a in self.available_actions_DM if a != ac0]
-            actual_action = np.random.choice(alternatives)
-
-        # Apply movement
-        new_position = self.blue_player + deltas[actual_action]
-        new_position = np.clip(new_position, 0, self.N - 1)
-        self.blue_player = new_position
-        
+            actual_action_blue = np.random.choice(alternatives)    
 
         ## -- Red player movement --
         
-        # Randomly select the actual action based on the execution probability of the blue player
+        # Randomly select the actual action based on the execution probability of the red player
         if np.random.rand() < self.red_player_execution_prob:
-            actual_action = ac1
+            actual_action_red = ac1
         else:
             alternatives = [a for a in self.available_actions_Adv if a != ac1]
-            actual_action = np.random.choice(alternatives)
+            actual_action_red = np.random.choice(alternatives)
 
+        # --- 1. Resolve Push Attempts ---
+        
+        if actual_action_blue == 4 and actual_action_red == 4:
+            if players_are_adjacent:
+               reward_blue = -0.05
+               reward_red = -0.05
+            else: 
+               reward_blue = -0.05 # Small penalty for failed push (not adjacent)   
+               reward_red = -0.05 # Small penalty for failed push (not adjacent) 
+               
+        elif actual_action_blue == 4 and actual_action_red != 4: 
+            if players_are_adjacent: 
+                push_direction = original_red_pos - original_blue_pos
+                pushed_red_player_position = original_red_pos + self.push_distance * push_direction
+                
+                self.red_player = np.clip(pushed_red_player_position, 0, self.N-1)
+                reward_blue = 0.2 # Reward blue for succesfull push
+                reward_red = -0.2 # Penilize red for no being pushed
+            else: 
+                reward_blue = -0.05 # Penilize blue if push was chosen but agents were not adjacent
+                
+        elif actual_action_blue != 4 and actual_action_red == 4: 
+            if players_are_adjacent: 
+                push_direction = original_blue_pos - original_red_pos
+                pushed_blue_player_position = original_blue_pos + self.push_distance * push_direction
+                
+                self.blue_player = np.clip(pushed_blue_player_position, 0, self.N-1)
+                reward_blue = -0.2 # Reward blue for succesfull push
+                reward_red = 0.2 # Penilize red for no being pushed
+            else: 
+                reward_red = -0.05 # Penilize red if push was chosen but agents were not adjacent
+                
         # Apply movement
-        new_position = self.red_player + deltas[actual_action]
-        new_position = np.clip(new_position, 0, self.N - 1)
-        self.red_player = new_position
+        if actual_action_blue != 4:
+            new_position = self.blue_player + deltas[actual_action_blue]
+            new_position = np.clip(new_position, 0, self.N - 1)
+            self.blue_player = new_position
+                
+        # Apply movement
+        if actual_action_red != 4:
+            new_position = self.red_player + deltas[actual_action_red]
+            new_position = np.clip(new_position, 0, self.N - 1)
+            self.red_player = new_position
 
         # --- Coin collection logic ---
+        
+        # Coin 1
+        if self.coin1_available:
+            blue_on_coin_1 = np.array_equal(self.blue_player, self.coin_1)
+            red_on_coin_1 = np.array_equal(self.red_player, self.coin_1)
 
-        # Determine all relevant events in this step
-        blue_on_blue_coin = np.array_equal(self.blue_player, self.blue_coin)
-        red_on_red_coin = np.array_equal(self.red_player, self.red_coin)
+            if blue_on_coin_1 and not red_on_coin_1:
+                self.blue_collected_coin1 = True
+                self.coin1_available = False
+                reward_blue = 2.0 # Add to base penalty, or set directly
+                reward_red = -0.5 # Optional: small penalty for opponent scoring
+                
+            elif red_on_coin_1 and not blue_on_coin_1:
+                self.red_collected_coin1 = True
+                self.coin1_available = False
+                reward_red = 2.0
+                reward_blue = -0.5
 
-        # For shared pickups
-        red_also_on_blue_coin = np.array_equal(self.red_player, self.blue_coin)
-        blue_also_on_red_coin = np.array_equal(self.blue_player, self.red_coin)
+            #elif blue_on_coin_1 and red_on_coin_1: # Contested
+                # reward_blue and reward_red keep their -0.1, or add a specific contest penalty
 
-        # Scenario 1: Both collect their respective (different) coins
-        if blue_on_blue_coin and not red_also_on_blue_coin and \
-        red_on_red_coin and not blue_also_on_red_coin:
-            reward_blue = 2  # e.g., +1 for own coin, -1 for opponent scoring
-            reward_red = 2   # e.g., +1 for own coin, -1 for opponent scoring
+        # Coin 2
+        if self.coin2_available:
+            blue_on_coin_2 = np.array_equal(self.blue_player, self.coin_2)
+            red_on_coin_2 = np.array_equal(self.red_player, self.coin_2)
+
+            if blue_on_coin_2 and not red_on_coin_2:
+                self.blue_collected_coin2 = True
+                self.coin2_available = False
+                reward_blue = 2.0
+                reward_red = -0.5
+                
+            elif red_on_coin_2 and not blue_on_coin_2:
+                self.red_collected_coin2 = True
+                self.coin2_available = False
+                reward_red = 2.0
+                reward_blue = -0.5
+                
+            #elif blue_on_coin_2 and red_on_coin_2: # Contested
+                
+
+        # After all coin collection attempts for the step:
+        if (self.blue_collected_coin1 and self.blue_collected_coin2) or \
+            (self.red_collected_coin1 and self.red_collected_coin2):
+            # Blue winds
+            if (self.blue_collected_coin1 and self.blue_collected_coin2):
+                reward_blue = 10 # Win bonus
+                reward_red = -5  # Loss penalty
+                
+            # Red wins
+            else: 
+                reward_red = 10 # Win bonus
+                reward_blue = -5 # Loss penalty
             self.done = True
-        # Scenario 2: Only Blue player collects blue coin (or shares it)
-        elif blue_on_blue_coin:
-            if red_also_on_blue_coin: # Shared pickup of blue coin
-                reward_blue = -10
-                reward_red = 5
-                # reward_red remains -0.1
-            else: # Blue collects blue coin alone
-                reward_blue = 10
-                reward_red = -10
-            self.done = True
-        # Scenario 3: Only Red player collects red coin (or shares it)
-        elif red_on_red_coin:
-            if blue_also_on_red_coin: # Shared pickup of red coin
-                reward_red = -10
-                reward_blue = 5
-                # reward_blue remains -0.1
-            else: # Red collects red coin alone
-                reward_red = 10
-                reward_blue = -10
-            self.done = True
-            
-        # Check if episode is done
+        elif (self.blue_collected_coin1 and self.red_collected_coin2) or \
+            (self.red_collected_coin1 and self.blue_collected_coin2 ):
+                reward_blue = -1
+                reward_red = -1
+                self.done = True
+        
+        # Check if max step coun is reached
         if self.step_count == self.max_steps:
             self.done = True
 
