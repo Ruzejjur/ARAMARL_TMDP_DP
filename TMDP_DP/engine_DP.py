@@ -583,8 +583,6 @@ class CoinGame():
         Each entity’s 2D position on an N×N grid is flattened and combined using radix encoding,
         ensuring every state has a unique ID.
         """
-        
-        base = self.N ** 2  # Total number of grid positions (used as radix base)
 
         # Flatten 2D positions into 1D indices (column-major order)
         p1 = self.blue_player[0] + self.N * self.blue_player[1]  # Blue player's position
@@ -677,7 +675,7 @@ class CoinGame():
         # Initialize step rewards
         reward_blue, reward_red = -0.1, -0.1
         
-        # --- Store original positions for push logic ---
+        # Store original positions for push logic
         original_blue_pos = self.blue_player.copy()
         original_red_pos = self.red_player.copy()
         
