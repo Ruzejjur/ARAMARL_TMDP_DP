@@ -542,8 +542,18 @@ class CoinGame():
         
         self.push_distance = push_distance # Distance to push the players away from each other
         
-        self.available_actions_DM = np.array([0, 1, 2, 3, 4])  # Actions available to the decision-maker
-        self.available_actions_Adv = np.array([0, 1, 2, 3, 4])  # Actions available to the adversary
+        self.available_actions_DM = np.array([0, 1, 2, 3])  # Actions available to the decision-maker
+        self.available_actions_Adv = np.array([0, 1, 2, 3])  # Actions available to the adversary
+        
+        self.actions_push = np.array([0,1]) # push or not push
+        
+        # Creating combined actions for both players
+        grid_A, grid_B = np.meshgrid(self.available_actions_DM, self.actions_push)
+        self.combined_actions_blue = np.column_stack([grid_A.ravel(), grid_B.ravel()])
+        
+        grid_A, grid_B = np.meshgrid(self.available_actions_Adv, self.actions_push)
+        self.combined_actions_red = np.column_stack([grid_A.ravel(), grid_B.ravel()])
+
         
         self.blue_player_execution_prob = 0.8 # Probability of executing the intended action for the blue player
         self.red_player_execution_prob = 0.8 # Probability of executing the intended action for the red player
@@ -620,8 +630,6 @@ class CoinGame():
         # (3 for P1_coll_count) * (3 for P2_coll_count)
         return (self.N**4) * (2**2) * (3**2)
 
-
-
     def reset(self):
         """
         Resets the environment to its initial state:
@@ -634,12 +642,12 @@ class CoinGame():
         self.done = False # Reset done flag to indicate the episode is not finished
 
         # Set initial positions for the agents
-        self.blue_player = self.blue_player_initial  # Starting position of the blue player
-        self.red_player = self.red_player_initial  # Starting position of the red player
+        self.blue_player = self.blue_player_initial.copy()  # Starting position of the blue player
+        self.red_player = self.red_player_initial.copy()  # Starting position of the red player
 
         # Set initial positions for the coins
-        self.coin_1 = self.coin_1_initial   # Starting position of the coin 1
-        self.coin_2 = self.coin_2_initial   # Starting position of the coin 2
+        self.coin_1 = self.coin_1_initial.copy()   # Starting position of the coin 1
+        self.coin_2 = self.coin_2_initial.copy()   # Starting position of the coin 2
         
         # Reset coin availability
         self.coin1_available = True
@@ -686,26 +694,30 @@ class CoinGame():
         
         # Define movement deltas for up, right, down, left
         deltas = np.array([(-1, 0), (0, 1), (1, 0), (0, -1)])
-
+        
+        # TODO: Apply radix decoding instead of this.
         # Randomly select the actual action based on the execution probability of the blue player
         if np.random.rand() < self.blue_player_execution_prob:
-            actual_action_blue = ac0
+            actual_action_blue = self.combined_actions_blue[ac0]
         else:
-            alternatives = [a for a in self.available_actions_DM if a != ac0]
-            actual_action_blue = np.random.choice(alternatives)    
+            num_total_blue_actions = len(self.combined_actions_blue)
+            alternatives = [a for a in range(num_total_blue_actions) if a != ac0]
+            actual_action_blue = self.combined_actions_blue[np.random.choice(alternatives)]   
 
-        ## -- Red player movement --
+        ## Red player movement 
         
         # Randomly select the actual action based on the execution probability of the red player
         if np.random.rand() < self.red_player_execution_prob:
-            actual_action_red = ac1
+            actual_action_red = self.combined_actions_red[ac1]
         else:
-            alternatives = [a for a in self.available_actions_Adv if a != ac1]
-            actual_action_red = np.random.choice(alternatives)
-
+            num_total_red_actions = len(self.combined_actions_red)
+            alternatives = [a for a in range(num_total_red_actions) if a != ac1]
+            actual_action_red = self.combined_actions_red[np.random.choice(alternatives)]   
+            
+    
         # --- 1. Resolve Push Attempts ---
         
-        if actual_action_blue == 4 and actual_action_red == 4:
+        if actual_action_blue[1] == 1 and actual_action_red[1] == 1:
             if players_are_adjacent:
                reward_blue = -0.05
                reward_red = -0.05
@@ -713,7 +725,7 @@ class CoinGame():
                reward_blue = -0.05 # Small penalty for failed push (not adjacent)   
                reward_red = -0.05 # Small penalty for failed push (not adjacent) 
                
-        elif actual_action_blue == 4 and actual_action_red != 4: 
+        elif actual_action_blue[1] == 1 and actual_action_red[1] != 1: 
             if players_are_adjacent: 
                 push_direction = original_red_pos - original_blue_pos
                 pushed_red_player_position = original_red_pos + self.push_distance * push_direction
@@ -724,7 +736,7 @@ class CoinGame():
             else: 
                 reward_blue = -0.05 # Penilize blue if push was chosen but agents were not adjacent
                 
-        elif actual_action_blue != 4 and actual_action_red == 4: 
+        elif actual_action_blue[1] != 1 and actual_action_red[1] == 1: 
             if players_are_adjacent: 
                 push_direction = original_blue_pos - original_red_pos
                 pushed_blue_player_position = original_blue_pos + self.push_distance * push_direction
@@ -734,16 +746,16 @@ class CoinGame():
                 reward_red = 0.2 # Penilize red for no being pushed
             else: 
                 reward_red = -0.05 # Penilize red if push was chosen but agents were not adjacent
-                
+        
         # Apply movement
-        if actual_action_blue != 4:
-            new_position = self.blue_player + deltas[actual_action_blue]
+        if actual_action_blue[1] != 1:
+            new_position = self.blue_player + deltas[actual_action_blue[0]]
             new_position = np.clip(new_position, 0, self.N - 1)
             self.blue_player = new_position
                 
         # Apply movement
-        if actual_action_red != 4:
-            new_position = self.red_player + deltas[actual_action_red]
+        if actual_action_red[1] != 1:
+            new_position = self.red_player + deltas[actual_action_red[0]]
             new_position = np.clip(new_position, 0, self.N - 1)
             self.red_player = new_position
 
