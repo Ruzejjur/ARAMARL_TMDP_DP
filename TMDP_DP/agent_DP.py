@@ -111,23 +111,23 @@ class Level1QAgent(Agent):
         self.Q = np.zeros([self.n_states, len(self.action_space), len(self.enemy_action_space)])
         # Parameters of the Dirichlet distribution used to model the other agent
         # Initialized using a uniform prior
-        self.Dir = np.ones( len(self.enemy_action_space) )
+        self.Dir = np.ones((self.n_states, len(self.enemy_action_space)))
 
     def act(self, obs=None):
         """An epsilon-greedy policy with explicit opponent modelling"""
         if np.random.rand() < self.epsilon:
             return np.random.choice(self.action_space)
         else:
-            return self.action_space[np.argmax(np.dot(self.Q[obs], self.Dir/np.sum(self.Dir)))]
+            return self.action_space[np.argmax(np.dot(self.Q[obs], self.Dir[obs]/np.sum(self.Dir[obs])))]
 
     def update(self, obs, actions, rewards, new_obs):
         
         a0, a1 = actions
         r0, _ = rewards
 
-        self.Dir[a1] += 1 # Update beliefs about adversary
+        self.Dir[obs, a1] += 1 # Update beliefs about adversary
         
-        self.Q[obs, a0, a1] = (1 - self.alpha)*self.Q[obs, a0, a1] + self.alpha*(r0 + self.gamma*np.max(np.dot(self.Q[new_obs], self.Dir/np.sum(self.Dir))))
+        self.Q[obs, a0, a1] = (1 - self.alpha)*self.Q[obs, a0, a1] + self.alpha*(r0 + self.gamma*np.max(np.dot(self.Q[new_obs], self.Dir[new_obs]/np.sum(self.Dir[new_obs]))))
     
     def get_Q_function(self):
         """Returns the Q-function of the agent"""
@@ -135,46 +135,6 @@ class Level1QAgent(Agent):
     
     def get_Belief(self):
         """Returns the Dirichlet distribution of the agent"""
-        return self.Dir
-
-class Level0DPAgent(Agent):
-    """
-    A myopic agent which maximizes imidiate reward based on belief about other agents actions.
-    """
-    # TODO: Finish this implementation
-    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma,reward_table, system_model):
-        Agent.__init__(self, action_space)
-
-        self.n_states = n_states
-        self.epsilon = epsilon
-        self.gamma = gamma
-        self.enemy_action_space = enemy_action_space
-        self.reward_table = reward_table
-        # Value iteration does not impement learning rate, leaving for coherence with definition of other agents
-        self.learning_rate = None
-        
-        # This is the value function V(b)
-        self.V = np.zeros(len(self.enemy_action_space))
-        
-        # Parameters of the Dirichlet distribution used to model the other agent
-        # Initialized using a uniform prior
-        self.Dir = np.ones(len(self.enemy_action_space))
-
-    def act(self, obs=None):
-        """ Select the action that maximizes the imidiate reward. """
-        # * No need for epsilon-greedy strategy in exploitation of the myopic agent as it does not facilitate learning        
-        selected_action = np.argmax(np.tensordot(self.reward_table, self.Dir/np.sum(self.Dir), axes=([1], [0])))
-
-        return selected_action
-
-    def update(self, obs, actions, rewards, new_obs):
-        """ Update weights of the agents belief about the other agents action selection. """
-        _, b = actions
-        
-        self.Dir[b] += 1 # Update beliefs about adversary
-    
-    def get_Belief(self):
-        """ Returns the Dirichlet distribution of the agents belief about other agents actions. """
         return self.Dir
 
 
@@ -298,7 +258,7 @@ class Level2QAgent_fixed(Agent):
             Dir_B = self.enemy.get_Belief()
             
             # Calculate the mean value of adversarys Q-function with respect to Dir_B
-            mean_values_QB_p_A_b = np.dot(QB[obs], Dir_B/np.sum(Dir_B))
+            mean_values_QB_p_A_b = np.dot(QB[obs], Dir_B[obs]/np.sum(Dir_B[obs]))
             
             # Calculate argmx a of the mean values of adversarys Q-function
             Adversary_best_action = np.argmax(mean_values_QB_p_A_b)
@@ -328,7 +288,7 @@ class Level2QAgent_fixed(Agent):
         Dir_B = self.enemy.get_Belief()
         
         # Calculate the mean value of adversarys Q-function with respect to Dir_B
-        mean_values_QB_p_B_a = np.dot(QB[obs], Dir_B/np.sum(Dir_B))
+        mean_values_QB_p_B_a = np.dot(QB[obs], Dir_B[new_obs]/np.sum(Dir_B[new_obs]))
         
         # Calculate argmx b of the mean values of adversarys Q-function
         Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
