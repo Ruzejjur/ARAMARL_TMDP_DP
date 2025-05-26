@@ -8,6 +8,11 @@ import numpy as np
 from numpy.random import choice
 
 
+def softmax(x, beta=1.0):
+    x = x - np.max(x)  # stability
+    e_x = np.exp(beta * x)
+    return e_x / np.sum(e_x)
+
 class Agent():
     """
     Parent abstract Agent.
@@ -84,13 +89,14 @@ class IndQLearningAgent(Agent):
 class IndQLearningAgentSoftmax(IndQLearningAgent):
     """ A vanilla Q-learning agent that applies softmax policy."""
     
-    def __init__(self, action_space, n_states, learning_rate, epsilon, gamma, enemy_action_space=None):
+    def __init__(self, action_space, n_states, learning_rate, epsilon, gamma, enemy_action_space=None, beta=1):
         IndQLearningAgent.__init__(self, action_space, n_states, learning_rate, epsilon, gamma, enemy_action_space)
         
+        self.beta = beta
+        
     def act(self, obs=None):
-        p = np.exp(self.Q[obs,:])
-        p = p / np.sum(p)
-        return choice(self.action_space, p=p)
+        
+        return choice(self.action_space, p=softmax(self.Q[obs,:],self.beta))
     
 class Level1QAgent(Agent):
     """
@@ -137,86 +143,31 @@ class Level1QAgent(Agent):
         """Returns the Dirichlet distribution of the agent"""
         return self.Dir
 
-
-class Level2QAgent(Agent):
+class Level1QAgentSoftmax(Level1QAgent):
     """
-    A Q-learning agent that treats the other player as a level 1 agent.
+    A Q-learning agent that treats the other player as a level 0 agent.
     She learns from other's actions, estimating their Q function.
     She represents Q-values in a tabular form, i.e., using a matrix Q.
     """
 
-    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
-        Agent.__init__(self, action_space)
-
-        self.n_states = n_states
-        self.alphaA = learning_rate
-        self.alphaB = learning_rate
-        self.epsilonA = epsilon
-        self.epsilonB = self.epsilonA
-        self.gammaA = gamma
-        self.gammaB = self.gammaA
-        #self.gammaB = 0
-
-        self.action_space = action_space
-        self.enemy_action_space = enemy_action_space
-
-        ## Other agent
-        self.enemy = Level1QAgent(self.enemy_action_space, self.action_space, self.n_states,
-            learning_rate=self.alphaB, epsilon=self.epsilonB, gamma=self.gammaB)
-
-        # This is the Q-function Q_A(s, a, b) (i.e, the supported DM Q-function)
-        self.QA = np.zeros([self.n_states, len(self.action_space), len(self.enemy_action_space)])
-
-
-    def act(self, obs=None):
-        """An epsilon-greedy policy"""
-
-        if np.random.rand() < self.epsilonA:
-            return choice(self.action_space)
-        else:
-            b = self.enemy.act(obs)
-            #print(self.QA.shape)
-            #print('b', b)
-            #print(self.QA[obs, :, b ])
-            # Add epsilon-greedyness
-            return self.action_space[ np.argmax( self.QA[obs, :, b ] ) ]
-
-    def update(self, obs, actions, rewards, new_obs):
-        """The vanilla Q-learning update rule"""
-        a, b = actions
-        rA, rB = rewards
-
-        self.enemy.update(obs, [b,a], [rB, rA], new_obs )
-
-        # We obtain opponent's next action using Q_B
+    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, beta=1):
+        Level1QAgent.__init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma)
         
-        # TODO: Check if this is correct
-        # !!! There should be mean value of Q(s',a',b') with respect to p(b'|s'), this formulation implies that the adversary
-        # !!! Is directly using the level-1 model to choose its actions (we don't need averaging in this case).
-        # * Note: This is the update, after we observe (s,a,b,r,s'). We utilize only this information, so the mean value described above
-        # *       should be implemented here, because we do not yet observe b'.
-        bb = self.enemy.act(obs)
+        self.beta = beta
     
-        # Finally we update the supported agent's Q-function
-        self.QA[obs, a, b] = (1 - self.alphaA)*self.QA[obs, a, b] + self.alphaA*(rA + self.gammaA*np.max(self.QA[new_obs, :, bb]))
-        
-class Level2QAgentSoftmax(Level2QAgent):
-    """
-    A Q-learning agent that treats the other player as a level 1 agent.
-    She learns from other's actions, estimating their Q function.
-    She represents Q-values in a tabular form, i.e., using a matrix Q.
-    """
-
-    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
-        Level2QAgent.__init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma)
-        
     def act(self, obs=None):
-        b = self.enemy.act(obs)
-        p = np.exp(self.QA[obs,:,b])
-        p = p / np.sum(p)
-        return choice(self.action_space, p=p)
+        """Softmax policy"""
         
-class Level2QAgent_fixed(Agent):
+        # Calculate the mean value of Q-function with respect to Dir
+        mean_values_QA_p_A_b = np.dot(self.Q[obs], self.Dir[obs]/np.sum(self.Dir[obs]))
+        
+        # Calculate the softmax selection probabilities
+        p_A_softmax_selection = softmax(mean_values_QA_p_A_b, self.beta)
+    
+        # Return calculated DM's best action using softmax policy
+        return choice(self.action_space, p=p_A_softmax_selection)
+        
+class Level2QAgent(Agent):
     """
     A Q-learning agent that treats the other player as a level 1 agent.
     She learns from other's actions, estimating their Q function.
@@ -288,7 +239,7 @@ class Level2QAgent_fixed(Agent):
         Dir_B = self.enemy.get_Belief()
         
         # Calculate the mean value of adversarys Q-function with respect to Dir_B
-        mean_values_QB_p_B_a = np.dot(QB[obs], Dir_B[new_obs]/np.sum(Dir_B[new_obs]))
+        mean_values_QB_p_B_a = np.dot(QB[new_obs], Dir_B[new_obs]/np.sum(Dir_B[new_obs]))
         
         # Calculate argmx b of the mean values of adversarys Q-function
         Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
@@ -297,6 +248,69 @@ class Level2QAgent_fixed(Agent):
         p_A_b = np.ones(len(self.enemy_action_space))
         p_A_b.fill(self.epsilonB/(len(self.enemy_action_space)-1))
         p_A_b[Adversary_best_action] = 1 - self.epsilonB
+        
+        # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
+        mean_values_QA_p_A_b = np.dot(self.QA[new_obs], p_A_b)
+        
+        # Finally we update the supported agent's Q-function
+        self.QA[obs, a, b] = (1 - self.alphaA)*self.QA[obs, a, b] + self.alphaA*(rA + self.gammaA*np.max(mean_values_QA_p_A_b))
+
+
+class Level2QAgentSoftmax(Level2QAgent):
+    """
+    A Q-learning agent that treats the other player as a level 1 agent.
+    She learns from other's actions, estimating their Q function.
+    She represents Q-values in a tabular form, i.e., using a matrix Q.
+    """
+
+    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, beta=1):
+        Level2QAgent.__init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma)
+        
+        self.beta = beta
+        
+        # Initializing adversary agent
+        self.enemy = Level1QAgentSoftmax(self.enemy_action_space, self.action_space, self.n_states,
+            learning_rate=self.alphaB, epsilon=self.epsilonB, gamma=self.gammaB, beta=beta)
+    
+    def act(self, obs=None):
+        """Softmax policy"""
+
+        # Adversary's Q-function
+        QB = self.enemy.get_Q_function()
+        
+        # Adversary's belief about DM's action (in form of weights)
+        Dir_B = self.enemy.get_Belief()
+        
+        # Calculate the mean value of adversarys Q-function with respect to Dir_B
+        mean_values_QB_p_B_a = np.dot(QB[obs], Dir_B[obs]/np.sum(Dir_B[obs]))
+        
+        p_A_b = softmax(mean_values_QB_p_B_a, self.beta)
+        
+        mean_values_QA_p_A_b = np.dot(self.QA[obs], p_A_b)
+        
+        p_A_softmax_selection = softmax(mean_values_QA_p_A_b, self.beta)
+        
+        # Return calculated DM's best action using softmax policy
+        return choice(self.action_space, p=p_A_softmax_selection)
+    
+    def update(self, obs, actions, rewards, new_obs):
+        a, b = actions
+        rA, rB = rewards
+
+        self.enemy.update(obs, [b,a], [rB, rA], new_obs)
+
+        # We obtain opponent's next action (b') using Q_B
+        
+        # Adversary's Q-function
+        QB = self.enemy.get_Q_function()
+        
+        # Adversary's belief about DM's action (in form of weights)
+        Dir_B = self.enemy.get_Belief()
+        
+        # Calculate the mean value of adversarys Q-function with respect to Dir_B
+        mean_values_QB_p_B_a = np.dot(QB[new_obs], Dir_B[new_obs]/np.sum(Dir_B[new_obs]))
+        
+        p_A_b = softmax(mean_values_QB_p_B_a, self.beta)
         
         # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
         mean_values_QA_p_A_b = np.dot(self.QA[new_obs], p_A_b)
