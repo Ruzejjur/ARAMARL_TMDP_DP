@@ -626,8 +626,6 @@ class CoinGame():
     
     @property
     def n_states(self):
-        # (N*N for P1_pos) * (N*N for P2_pos) * (2 for C1_avail) * (2 for C2_avail) *
-        # (3 for P1_coll_count) * (3 for P2_coll_count)
         return (self.N**4) * (2**2) * (3**2)
 
     def reset(self):
