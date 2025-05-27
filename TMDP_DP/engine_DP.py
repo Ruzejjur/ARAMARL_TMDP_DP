@@ -172,7 +172,8 @@ class CoinGame():
         # Define movement deltas for up, right, down, left
         deltas = np.array([(-1, 0), (0, 1), (1, 0), (0, -1)])
         
-        # TODO: Apply radix decoding instead of this.
+        ## Blue player action selection 
+        
         # Randomly select the actual action based on the execution probability of the blue player
         if np.random.rand() < self.blue_player_execution_prob:
             actual_action_blue = self.combined_actions_blue[ac0]
@@ -181,7 +182,7 @@ class CoinGame():
             alternatives = [a for a in range(num_total_blue_actions) if a != ac0]
             actual_action_blue = self.combined_actions_blue[np.random.choice(alternatives)]   
 
-        ## Red player movement 
+        ## Red player action selection 
         
         # Randomly select the actual action based on the execution probability of the red player
         if np.random.rand() < self.red_player_execution_prob:
@@ -225,16 +226,15 @@ class CoinGame():
                 reward_red = -0.05 # Penilize red if push was chosen but agents were not adjacent
         
         # Apply movement
-        if actual_action_blue[1] != 1:
-            new_position = self.blue_player + deltas[actual_action_blue[0]]
-            new_position = np.clip(new_position, 0, self.N - 1)
-            self.blue_player = new_position
+        
+        new_position = self.blue_player + deltas[actual_action_blue[0]]
+        new_position = np.clip(new_position, 0, self.N - 1)
+        self.blue_player = new_position
                 
         # Apply movement
-        if actual_action_red[1] != 1:
-            new_position = self.red_player + deltas[actual_action_red[0]]
-            new_position = np.clip(new_position, 0, self.N - 1)
-            self.red_player = new_position
+        new_position = self.red_player + deltas[actual_action_red[0]]
+        new_position = np.clip(new_position, 0, self.N - 1)
+        self.red_player = new_position
 
         # --- Coin collection logic ---
         
