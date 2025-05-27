@@ -24,7 +24,7 @@ class CoinGame():
         self.available_move_actions_DM = np.array([0, 1, 2, 3])  # Movement actions available to the decision-maker
         self.available_move_actions_Adv = np.array([0, 1, 2, 3])  # Movement actions available to the adversary
         
-        self.actions_push = np.array([0,1]) # push or not push
+        self.actions_push = np.array([0,1]) # No push and push actions available to both players
         
         # Creating combined actions for both players
         grid_A, grid_B = np.meshgrid(self.available_move_actions_DM, self.actions_push)
