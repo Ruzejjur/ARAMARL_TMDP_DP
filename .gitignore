@@ -1,5 +1,6 @@
 # User defined ignored files
 Garbage/
+*.mp4
 
 
 # Byte-compiled / optimized / DLL files

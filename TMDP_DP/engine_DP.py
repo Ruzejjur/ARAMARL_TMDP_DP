@@ -34,8 +34,8 @@ class CoinGame():
         self.combined_actions_red = np.column_stack([grid_A.ravel(), grid_B.ravel()])
 
         
-        self.blue_player_execution_prob = 0.8 # Probability of executing the intended action for the blue player
-        self.red_player_execution_prob = 0.8 # Probability of executing the intended action for the red player
+        self.blue_player_execution_prob = 0.6 # Probability of executing the intended action for the blue player
+        self.red_player_execution_prob = 0.6 # Probability of executing the intended action for the red player
         
         # Player positions
         self.blue_player = np.array([self.N // 2, 0]) # Centered start at left edge
