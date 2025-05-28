@@ -6,7 +6,8 @@ This module implements several agents. An agent is characterized by two methods:
 
 import numpy as np
 from numpy.random import choice
-
+from itertools import product
+import copy
 
 def softmax(x, beta=1.0):
     x = x - np.max(x)  # stability
@@ -113,8 +114,10 @@ class Level1QAgent(Agent):
         self.epsilon = epsilon
         self.gamma = gamma
         self.enemy_action_space = enemy_action_space
+        
         # This is the Q-function Q(s, a, b)
         self.Q = np.zeros([self.n_states, len(self.action_space), len(self.enemy_action_space)])
+        
         # Parameters of the Dirichlet distribution used to model the other agent
         # Initialized using a uniform prior
         self.Dir = np.ones((self.n_states, len(self.enemy_action_space)))
@@ -329,58 +332,110 @@ class Level1DPAgent(Agent):
     She represents value function in a tabular form, i.e., using a matrix.
     """
 
-    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, reward_table, system_model):
+    def __init__(self, action_space, enemy_action_space, n_states, epsilon, gamma, env):
         Agent.__init__(self, action_space)
 
         self.n_states = n_states
-        self.alphaA = learning_rate
-        self.alphaB = learning_rate
-        self.epsilonA = epsilon
-        self.epsilonB = self.epsilonA
-        self.gammaA = gamma
-        self.gammaB = self.gammaA
-        self.reward_table = reward_table
-        self.system_model = system_model
-        #self.gammaB = 0
-
-        self.action_space = action_space
+        self.epsilon = epsilon
+        self.gamma = gamma
+        
         self.enemy_action_space = enemy_action_space
-
-        ## Other agent
-        self.enemy = Level0DPAgent(self.enemy_action_space, self.action_space, self.n_states,
-            learning_rate=self.alphaB, epsilon=self.epsilonB, gamma=self.gammaB, reward_table=self.reward_table, system_model=None)
-
+        
         # This is the value function V(s,a)
         self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
         
-        # This is the inner term of value function for calculation of value in various contexts: 
-        #   1. Update of the value function.
-        #   2. Calculation of the value function for the action selection.
-        #   3. Constraction of epsilon greedy for upper level agent
+        # Parameters of the Dirichlet distribution used to model the other agent
+        # Initialized using a uniform prior
+        self.Dir = np.ones((self.n_states, len(self.enemy_action_space)))
+        
+        # Initialize an empty environment for simulation of steps 
+        #* Warning: Do not copy env to many times -> extreme memory and computational overhead (garbage collection)
+        self.env_snapshot = copy.deepcopy(env)
+        self.env_snapshot.blue_player_execution_prob = 1
+        self.env_snapshot.red_player_execution_prob = 1
+        
+        
+        # All combination of radix encoded actions of DM and Adv
+        grid_A, grid_B = np.meshgrid(np.array(range(len(self.env_snapshot.combined_actions_blue))), np.array(range(len(self.env_snapshot.combined_actions_red))))
+        self.DM_Adv_act_combination = np.column_stack([grid_A.ravel(), grid_B.ravel()])
+    
+    def reset_sim_env(self,env):
+        """
+        Resets the simulated environment to its initial state:
+        - Step counter is set to 0
+        - Player and coin positions are restored to their starting values
+        """
+        
+        # Reset the environment
+        self.env_snapshot.reset()
+        
+        # Player positions
+        self.env_snapshot.blue_player = env.blue_player.copy() 
+        self.env_snapshot.red_player = env.red_player.copy()
+        
+        # Coin availability
+        self.env_snapshot.coin1_available = env.coin1_available.copy()
+        self.env_snapshot.coin2_available = env.coin2_available.copy()
+        
+        # Player coin collection
+        self.env_snapshot.blue_collected_coin1 = env.blue_collected_coin1.copy()
+        self.env_snapshot.blue_collected_coin2 = env.blue_collected_coin2.copy()
+        self.env_snapshot.red_collected_coin1 = env.red_collected_coin1.copy()
+        self.env_snapshot.red_collected_coin2 = env.red_collected_coin2.copy()
+        
+        
+    def act(self, obs, env):
+        
+        ## Setup the simulated environment to identical state as the actual one 
+        self.reset_sim_env(env)
+        
+        ## Simulate movement and collect rewards for each action
+        
+        # Initialize array for simulated rewards for all possible DM and Adv actions
+        DM_rewards_for_act_comb = np.zeros((len(self.env_snapshot.combined_actions_blue), len(self.env_snapshot.combined_actions_red)))
+        
+        # Perform all possible actions of DM and Adv
+        for act_comb in self.DM_Adv_act_combination: 
+            # Perform steps for DM and Adv respectively and collect rewards
+            _, rewards, _ = self.env_snapshot.step(act_comb)
+            
+            # Save only DM's reward
+            DM_rewards_for_act_comb[act_comb[0], act_comb[1]] = rewards[0]
+            
+            # Reset simulated environment to the current real state
+            self.reset_sim_env(env)
+        
+        ## Construct movement model for all possible actions action
+        
+        # Collect indicies of states to which the movement is possible
+        
+        # TODO: There is a better way to do this by preinitializing what we know
+        probab = np.zeros((self.n_states, len(self.env_snapshot.combined_actions_blue), len(self.env_snapshot.combined_actions_red)))
+        
+        # TODO: Combine this with for cycle above
+        # Perform all possible actions of DM and Adv
+        
+        for act_comb in self.DM_Adv_act_combination:
+            s_new_intended, _ = self.env_snapshot.step(act_comb)
+            
+            
+            
+            probab[s_new_intended, act_comb[0], act_comb[1]] = env.blue_player_execution_prob*env.red_player_execution_prob
+            
+            # Reset simulated environment to current real state
+            self.reset_sim_env(env)
+            
+            for act_comb_other in self.DM_Adv_act_combination: 
+                if not np.array_equal(act_comb,act_comb_other): 
+                    s_new_non_intended, _ = self.env_snapshot.step(act_comb_other)
+                    probab[s_new_non_intended, act_comb[0], act_comb[1]] = (1 - env.blue_player_execution_prob*env.red_player_execution_prob)/len(self.DM_Adv_act_combination)
 
-    def extract_epsilon_greedy(self): 
-        """Extracts the epsilon-greedy policy from the level-0 agent"""
-        other_agent_optimal_action = self.enemy.act(None)
+                    # Reset simulated environment to current real state
+                    self.reset_sim_env(env)
+                    
+        ## Perform action selection
         
-        eps_greedy = np.ones(len(self.enemy_action_space)) * self.epsilonA / (len(self.enemy_action_space) - 1)
-        eps_greedy[other_agent_optimal_action] = 1 - self.epsilonA
-        
-        return eps_greedy
-    def act(self, obs):
-        
-        eps_greedy_policy_level_0_agent = self.extract_epsilon_greedy()
-        
-        aux1 = np.tensordot(self.V, eps_greedy_policy_level_0_agent, axes=([1], [0]))
-        
-        # TODO: subset of self.system model is a bxs matrix adjust after definition of system model in the environment
-        aux2 = np.tensordot(aux1, self.system_model[obs,:,:,:], axes=([0], [3]))
-        
-        # TODO: If aux2 is redefined modify this also
-        aux3 = np.tensordot(self.reward_table[obs, :, :] + self.gammaB*aux2, eps_greedy_policy_level_0_agent, axes=([1], [0]))
-        
-        selected_action = np.argmax(aux3)
-        
-        return selected_action
+        return np.argmax(np.dot(DM_rewards_for_act_comb, self.Dir[obs]/np.sum(self.Dir[obs]))+self.gamma*(np.dot(np.dot(self.V,self.Dir/np.sum(self.Dir)), probab)))
         
     def update(self, obs, actions, rewards, new_obs):
         """Level-1 value iteration update"""
