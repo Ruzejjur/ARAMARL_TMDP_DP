@@ -34,8 +34,8 @@ class CoinGame():
         self.combined_actions_red = np.column_stack([grid_A.ravel(), grid_B.ravel()])
 
         
-        self.blue_player_execution_prob = 0.6 # Probability of executing the intended action for the blue player
-        self.red_player_execution_prob = 0.6 # Probability of executing the intended action for the red player
+        self.blue_player_execution_prob = 0.8 # Probability of executing the intended action for the blue player
+        self.red_player_execution_prob = 0.8 # Probability of executing the intended action for the red player
         
         # Player positions
         self.blue_player = np.array([self.N // 2, 0]) # Centered start at left edge
@@ -67,7 +67,7 @@ class CoinGame():
     def get_state(self):
         """
         Returns a unique integer representing the full state of the environment,
-        based the positions of the blue player, red player, coin availability, and collected coin counts.
+        based on the positions of the blue player, red player, coin availability, and collected coin counts.
 
         Each entity’s 2D position on an N×N grid is flattened and combined using radix encoding,
         ensuring every state has a unique ID.
@@ -231,8 +231,8 @@ class CoinGame():
                reward_blue += -0.05
                reward_red += -0.05
             else: 
-               reward_blue += -0.15 # Small penalty for failed push (not adjacent)   
-               reward_red += -0.15 # Small penalty for failed push (not adjacent) 
+               reward_blue += -0.05 # Small penalty for failed push (not adjacent)   
+               reward_red += -0.05 # Small penalty for failed push (not adjacent) 
                
         elif actual_action_blue[1] == 1: # Only blue player attempts to push
             if players_are_adjacent: 
@@ -262,6 +262,11 @@ class CoinGame():
         
         out_of_boundry_penalty = -0.5 # Adjust as needed
         
+        # Copy the current positions of agents for further checking if
+        # agents try to move to the same position as the other one
+        new_blue_position = self.blue_player.copy()
+        new_red_position = self.red_player.copy()
+        
         # Blue Player Movement (only if not pushed by Red this turn)
         if not pushed_blue_this_step:
             new_blue_position = original_blue_pos + deltas[actual_action_blue[0]]
@@ -270,8 +275,6 @@ class CoinGame():
             if new_blue_position[0] < 0 or new_blue_position[0] >= self.N or \
                 new_blue_position[1] < 0 or new_blue_position[1] >= self.N:
                 reward_blue += out_of_boundry_penalty
-            
-            self.blue_player = np.clip(new_blue_position, 0, self.N - 1)
                 
         # Red Player Movement (only if not pushed by Blue this turn)
         if not pushed_red_this_step:
@@ -282,8 +285,16 @@ class CoinGame():
                 new_red_position[1] < 0 or new_red_position[1] >= self.N:
                 reward_red += out_of_boundry_penalty
             
+        # Check if agents did not end up on the same spot
+        # Penilize both agents for this
+        if not np.array_equal(new_blue_position, new_red_position):
+            self.blue_player = np.clip(new_blue_position, 0, self.N - 1)
             self.red_player = np.clip(new_red_position, 0, self.N - 1)
-
+        else: 
+            reward_blue += -0.05
+            reward_red += -0.05
+            
+        
         # --- Coin collection logic ---
         
         # Coin 1
