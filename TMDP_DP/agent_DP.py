@@ -22,7 +22,7 @@ class Agent():
     def __init__(self, action_space):
         self.action_space = action_space
 
-    def act(self, obs):
+    def act(self, env, obs):
         """
         This implements the policy, \pi : S -> A.
         obs is the observed state s
@@ -47,7 +47,7 @@ class RandomAgent(Agent):
         Agent.__init__(self, action_space)
         self.p = p
 
-    def act(self, obs=None):
+    def act(self, env, obs=None):
 
         assert len(self.action_space) == 2
         return choice(self.action_space, p=[self.p, 1-self.p])
@@ -73,7 +73,7 @@ class IndQLearningAgent(Agent):
         # This is the Q-function Q(s, a)
         self.Q = -10*np.ones([self.n_states, len(self.action_space)])
 
-    def act(self, obs=None):
+    def act(self, env, obs=None):
         """An epsilon-greedy policy"""
         if np.random.rand() < self.epsilon:
             return choice(self.action_space)
@@ -95,7 +95,7 @@ class IndQLearningAgentSoftmax(IndQLearningAgent):
         
         self.beta = beta
         
-    def act(self, obs=None):
+    def act(self, env, obs=None):
         
         return choice(self.action_space, p=softmax(self.Q[obs,:],self.beta))
     
@@ -122,7 +122,7 @@ class Level1QAgent(Agent):
         # Initialized using a uniform prior
         self.Dir = np.ones((self.n_states, len(self.enemy_action_space)))
 
-    def act(self, obs=None):
+    def act(self, env, obs=None):
         """An epsilon-greedy policy with explicit opponent modelling"""
         if np.random.rand() < self.epsilon:
             return np.random.choice(self.action_space)
@@ -158,7 +158,7 @@ class Level1QAgentSoftmax(Level1QAgent):
         
         self.beta = beta
     
-    def act(self, obs=None):
+    def act(self, env, obs=None):
         """Softmax policy"""
         
         # Calculate the mean value of Q-function with respect to Dir
@@ -199,7 +199,7 @@ class Level2QAgent(Agent):
             learning_rate=self.alphaB, epsilon=self.epsilonB, gamma=self.gammaB)
 
 
-    def act(self, obs=None):
+    def act(self, env, obs=None):
         """An epsilon-greedy policy"""
 
         if np.random.rand() < self.epsilonA:
@@ -275,7 +275,7 @@ class Level2QAgentSoftmax(Level2QAgent):
         self.enemy = Level1QAgentSoftmax(self.enemy_action_space, self.action_space, self.n_states,
             learning_rate=self.alphaB, epsilon=self.epsilonB, gamma=self.gammaB, beta=beta)
     
-    def act(self, obs=None):
+    def act(self, env, obs=None):
         """Softmax policy"""
 
         # Adversary's Q-function
@@ -384,7 +384,7 @@ class Level1DPAgent(Agent):
         self.env_snapshot.red_collected_coin2 = env.red_collected_coin2.copy()
         
         
-    def act(self, obs, env):
+    def act(self, env, obs=None):
         
         ## Setup the simulated environment to identical state as the actual one 
         self.reset_sim_env(env)
@@ -410,32 +410,85 @@ class Level1DPAgent(Agent):
         # Collect indicies of states to which the movement is possible
         
         # TODO: There is a better way to do this by preinitializing what we know
+        # TODO: Or make this smaller as there are only 64 (8x8 possible action executions) possible states to move to
         probab = np.zeros((self.n_states, len(self.env_snapshot.combined_actions_blue), len(self.env_snapshot.combined_actions_red)))
         
         # TODO: Combine this with for cycle above
         # Perform all possible actions of DM and Adv
         
-        for act_comb in self.DM_Adv_act_combination:
-            s_new_intended, _ = self.env_snapshot.step(act_comb)
+        for act_comb_intended in self.DM_Adv_act_combination:
+            # Save inteded actions for comparison with executed actions
+            blue_intended_action = act_comb_intended[0]
+            red_intendet_action = act_comb_intended[1]
             
-            
-            
-            probab[s_new_intended, act_comb[0], act_comb[1]] = env.blue_player_execution_prob*env.red_player_execution_prob
-            
-            # Reset simulated environment to current real state
-            self.reset_sim_env(env)
-            
-            for act_comb_other in self.DM_Adv_act_combination: 
-                if not np.array_equal(act_comb,act_comb_other): 
-                    s_new_non_intended, _ = self.env_snapshot.step(act_comb_other)
-                    probab[s_new_non_intended, act_comb[0], act_comb[1]] = (1 - env.blue_player_execution_prob*env.red_player_execution_prob)/len(self.DM_Adv_act_combination)
+            for act_comb_executed in self.DM_Adv_act_combination:
+                
+                # Get the resulting state of executed actions
+                s_new_executed, _ = self.env_snapshot.step(act_comb_executed)
+                
+                # Check if move actions were intended 
+                blue_move_is_intendet = np.array_equal(self.env_snapshot.combined_actions_blue[blue_intended_action][0], self.env_snapshot.combined_actions_blue[act_comb_executed[0]][0])
+                red_move_is_intendet = np.array_equal(self.env_snapshot.combined_actions_red[red_intendet_action][0], self.env_snapshot.combined_actions_red[act_comb_executed[1]][0])
+                
+                # Check if executed push action us equal to intended push action
+                blue_push_is_intendet = np.array_equal(self.env_snapshot.combined_actions_blue[blue_intended_action][1], self.env_snapshot.combined_actions_blue[act_comb_executed[0]][1])
+                red_push_is_intendet = np.array_equal(self.env_snapshot.combined_actions_red[red_intendet_action][1], self.env_snapshot.combined_actions_red[act_comb_executed[1]][1])
+                
+                
+                # if not blue_move_is_intendet and not red_move_is_intendet and not blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                
+                # elif not blue_move_is_intendet and not red_move_is_intendet and not blue_push_is_intendet and red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
 
-                    # Reset simulated environment to current real state
-                    self.reset_sim_env(env)
+                # elif not blue_move_is_intendet and not red_move_is_intendet and blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                    
+                if not blue_move_is_intendet and not red_move_is_intendet and blue_push_is_intendet and red_push_is_intendet: 
+                    probab[s_new_executed, blue_intended_action, red_intendet_action] += (1-env.blue_player_execution_prob)/(len(env.available_move_actions_DM)-1)*(1-env.red_player_execution_prob)/(len(env.available_move_actions_Adv)-1)
+                
+                # elif not blue_move_is_intendet and red_move_is_intendet and not blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0  
+                
+                # elif not blue_move_is_intendet and red_move_is_intendet and not blue_push_is_intendet and red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0            
+                
+                # elif not blue_move_is_intendet and red_move_is_intendet and blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                    
+                elif not blue_move_is_intendet and red_move_is_intendet and blue_push_is_intendet and red_push_is_intendet: 
+                    probab[s_new_executed, blue_intended_action, red_intendet_action] += (1-env.blue_player_execution_prob)/(len(env.available_move_actions_DM)-1)*env.red_player_execution_prob
+                    
+                # elif blue_move_is_intendet and not red_move_is_intendet and not blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                    
+                # elif blue_move_is_intendet and not red_move_is_intendet and not blue_push_is_intendet and  red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                    
+                # elif blue_move_is_intendet and not red_move_is_intendet and blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                    
+                elif blue_move_is_intendet and not red_move_is_intendet and blue_push_is_intendet and red_push_is_intendet: 
+                    probab[s_new_executed, blue_intended_action, red_intendet_action] += env.blue_player_execution_prob*(1-env.red_player_execution_prob)/(len(env.available_move_actions_Adv)-1)
+                    
+                # elif blue_move_is_intendet and red_move_is_intendet and not blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                    
+                # elif  blue_move_is_intendet and red_move_is_intendet and not blue_push_is_intendet and red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                
+                # elif blue_move_is_intendet and red_move_is_intendet and blue_push_is_intendet and not red_push_is_intendet: 
+                #     probab[s_new_executed, blue_intended_action, red_intendet_action] = 0
+                    
+                elif blue_move_is_intendet and red_move_is_intendet and blue_push_is_intendet and red_push_is_intendet: 
+                    probab[s_new_executed, blue_intended_action, red_intendet_action] += env.blue_player_execution_prob*env.red_player_execution_prob
+                
+                # Reset simulated environment to the current real state
+                self.reset_sim_env(env)
                     
         ## Perform action selection
         
-        return np.argmax(np.dot(DM_rewards_for_act_comb, self.Dir[obs]/np.sum(self.Dir[obs]))+self.gamma*(np.dot(np.dot(self.V,self.Dir/np.sum(self.Dir)), probab)))
+        return np.argmax(np.dot(DM_rewards_for_act_comb, self.Dir[obs]/np.sum(self.Dir[obs]))+self.gamma*(np.dot(np.einsum('sb,sab->ab',np.dot(self.V,(self.Dir / self.Dir.sum(axis=1, keepdims=True)).T), probab),self.Dir[obs]/np.sum(self.Dir[obs]))))
         
     def update(self, obs, actions, rewards, new_obs):
         """Level-1 value iteration update"""
@@ -503,7 +556,7 @@ class Level2DPAgent(Agent):
         
         return eps_greedy
 
-    def act(self, obs):
+    def act(self, env, obs=None):
 
             eps_greedy_policy_level_1_agent = self.extract_epsilon_greedy()
             
