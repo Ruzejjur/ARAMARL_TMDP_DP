@@ -260,7 +260,7 @@ class CoinGame():
         
         # --- Apply Movement ---
         
-        out_of_boundry_penalty = -0.5 # Adjust as needed
+        out_of_boundry_penalty = -1 # Adjust as needed
         
         # Copy the current positions of agents for further checking if
         # agents try to move to the same position as the other one
