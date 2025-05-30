@@ -1,7 +1,7 @@
 # User defined ignored files
 Garbage/
 *.mp4
-
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
