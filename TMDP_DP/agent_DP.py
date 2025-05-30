@@ -516,8 +516,14 @@ class Level1DPAgent(Agent):
             p_b_given_s_obs = self.Dir[obs] / np.sum(self.Dir[obs])
             total_action_values = np.dot(expected_DM_rewards, p_b_given_s_obs) + \
                                 self.gamma * np.dot(weighted_sum_future_V, p_b_given_s_obs)
-                                
-            return np.argmax(total_action_values)
+            
+            # Find indices of all max values
+            max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
+
+            # Choose randomly among them
+            chosen_action = np.random.choice(max_indices)
+            
+            return chosen_action
         
         
 def update(self, obs, actions, rewards, new_obs, env):
@@ -660,6 +666,8 @@ def update(self, obs, actions, rewards, new_obs, env):
         
         # Q_values[idm] = Q(obs, idm, b_opp_taken_in_obs)
         Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
+        
+        
         
         # Update V(obs, b_opp_taken_in_obs) with the max Q-value (DM plays optimally against b_opp_taken_in_obs)
         self.V[obs, b_opp_taken_in_obs] = np.max(Q_values_for_dm_intentions)
