@@ -2,6 +2,8 @@
 Garbage/
 *.mp4
 *.png
+Optimization_plan.rtf
+*.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
