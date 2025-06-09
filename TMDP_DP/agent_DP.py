@@ -852,6 +852,7 @@ class Level1DPAgent_Stationary(Agent):
             return chosen_action
     
     def act(self, obs, env):
+        "Epsilon greedy action selection strategy."
         
         if np.random.rand() < self.epsilon:
             return np.random.choice(self.action_space)
@@ -1065,13 +1066,8 @@ class Level2DPAgent_Stationary(Agent):
         self.env_snapshot.blue_collected_coin2 = env.blue_collected_coin2
         self.env_snapshot.red_collected_coin1 = env.red_collected_coin1
         self.env_snapshot.red_collected_coin2 = env.red_collected_coin2
-            
-    def act(self, obs, env):
-        
-        if np.random.rand() < self.epsilonA:
-            return np.random.choice(self.action_space)
-        else:
-
+    
+    def optim_act(self, obs, env):
             ## Determine reachable next states and their immediate rewards
             
             self.reset_sim_env(env)
@@ -1100,8 +1096,18 @@ class Level2DPAgent_Stationary(Agent):
             #Dir_relevant = self.Dir[unique_s_primes, :] # Shape: (len(unique_s_primes), num_Adv_actions)
             
             eps_greed_enemy = np.array(self.n_states, len(self.enemy_action_space))
+            #!!! Because we need to simulate optimal action of adversary using current V but in state s' we need to modify env_reset method so it can be easily setup into state s'
+            #!!! As the state s' contains all necessary information about board, we can implement radix decoding instead of copying of state of game objects in reset_sim_env.
             
-            ###!!! Need to package enemy optimal action into a method before proceeding
+            for i, s_prime_idx in enumerate(unique_s_primes):
+                enemy_opt_act = self.enemy.optim_act(s_prime_idx, env)
+                eps_greed_enemy[s_prime_idx, enemy_opt_act] = 1 - self.epsilonB
+                
+                non_optimal_actions_bool_mask = eps_greed_enemy[s_prime_idx, np.arange(len(eps_greed_enemy[s_prime_idx, :])) != enemy_opt_act]
+                
+                eps_greed_enemy[s_prime_idx, non_optimal_actions_bool_mask] = self.epsilonB/(self.num_Adv_actions - 1)
+            
+    
 
             # Calculate normalization constant only for s which are relevant
             dir_sum_relevant = np.sum(Dir_relevant, axis=1, keepdims=True)
@@ -1148,6 +1154,14 @@ class Level2DPAgent_Stationary(Agent):
             chosen_action = np.random.choice(max_indices)
             
             return chosen_action
+    
+    def act(self, obs, env):
+        
+        if np.random.rand() < self.epsilonA:
+            return np.random.choice(self.action_space)
+        else:
+            return self.optim_act(obs, env)
+ 
 
     def update(self, obs, actions, rewards, new_obs, env=None):
         a, b = actions

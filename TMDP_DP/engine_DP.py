@@ -77,35 +77,24 @@ class CoinGame():
         p1 = self.blue_player[0] + self.N * self.blue_player[1]  # Blue player's position
         p2 = self.red_player[0] + self.N * self.red_player[1]    # Red player's position
         
-        # Coin availability on map
-        c1_avail_val = 1 if self.coin1_available else 0
-        c2_avail_val = 1 if self.coin2_available else 0
-        
-        # How many coins each player has collected *so far*
-        # (0, 1, or 2 - though game ends at 2 for one player)
-        # For state simplicity, let's use: 0 = 0 coins, 1 = 1 coin, 2 = 2 coins (winning state)
-        blue_coins_collected_count = int(self.blue_collected_coin1) + int(self.blue_collected_coin2)
-        red_coins_collected_count = int(self.red_collected_coin1) + int(self.red_collected_coin2)
-        
         # Radix encoding:
         # Max values: p_flat=N*N-1, c_avail=1, collected_count=2
         # Order: P1_pos, P2_pos, C1_avail, C2_avail, P1_coll_count, P2_coll_count
         base_pos = self.N * self.N
-        base_avail = 2 # (0 or 1)
-        base_coll_count = 3 # (0, 1, or 2)
+        base_coll = 2 # 0 or 1 for each coin
 
         state_id = p1
         state_id = state_id * base_pos + p2
-        state_id = state_id * base_avail + c1_avail_val
-        state_id = state_id * base_avail + c2_avail_val
-        state_id = state_id * base_coll_count + blue_coins_collected_count
-        state_id = state_id * base_coll_count + red_coins_collected_count
+        state_id = state_id * base_coll + int(self.blue_collected_coin1)
+        state_id = state_id * base_coll + int(self.blue_collected_coin2)
+        state_id = state_id * base_coll + int(self.red_collected_coin1)
+        state_id = state_id * base_coll + int(self.red_collected_coin2)
         
         return int(state_id)
     
     @property
     def n_states(self):
-        return (self.N**4) * (2**2) * (3**2)
+        return (self.N**4) * (2**4)
 
     def reset(self):
         """
