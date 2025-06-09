@@ -668,6 +668,7 @@ class Level1DPAgent_Stationary(Agent):
     A value iteration agent that treats the other player as a level 0 agent.
     She learns from other's actions, estimating their value function.
     She represents value function in a tabular form, i.e., using a matrix.
+    Stationary in this case means that the agent has full information about transition distribution and precalculates it befefore running act() and update()
     """
 
     def __init__(self, action_space, enemy_action_space, n_states, epsilon, gamma, env):
@@ -775,16 +776,10 @@ class Level1DPAgent_Stationary(Agent):
         self.env_snapshot.blue_collected_coin2 = env.blue_collected_coin2
         self.env_snapshot.red_collected_coin1 = env.red_collected_coin1
         self.env_snapshot.red_collected_coin2 = env.red_collected_coin2
-        
-        
-    def act(self, obs, env):
-        
-        if np.random.rand() < self.epsilon:
-            return np.random.choice(self.action_space)
-        else:
+    
+    def optim_act(self, obs, env): 
 
             ## Determine reachable next states and their immediate rewards
-            
             self.reset_sim_env(env)
             executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
             actual_next_states_set = set() # To store unique s_prime values
@@ -855,6 +850,14 @@ class Level1DPAgent_Stationary(Agent):
             chosen_action = np.random.choice(max_indices)
             
             return chosen_action
+    
+    def act(self, obs, env):
+        
+        if np.random.rand() < self.epsilon:
+            return np.random.choice(self.action_space)
+        else:
+    
+            return self.optim_act(obs, env)
         
     def update(self, obs, actions, rewards, new_obs, env):
             # obs: current state where actions were taken
@@ -942,7 +945,240 @@ class Level1DPAgent_Stationary(Agent):
             # Update the Dirichlet model for the opponent's observed action
             self.Dir[obs, b_opp_taken_in_obs] += 1              
         
-           
+class Level2DPAgent_Stationary(Agent):
+    """
+    A value iteration agent that treats the other player as a level 1 agent.
+    She learns from other's actions, estimating their value function.
+    She represents value function in a tabular form, i.e., using a matrix V.
+    Stationary in this case means that the agent has full information about transition distribution and precalculates it befefore running act() and update()
+    """
+
+    def __init__(self, action_space, enemy_action_space, n_states, epsilon, gamma, env):
+        Agent.__init__(self, action_space)
+
+        self.n_states = n_states
+        self.epsilonA = epsilon
+        self.epsilonB = epsilon
+        self.gammaA = gamma
+        self.gammaB = gamma
+        
+        self.enemy_action_space = enemy_action_space
+
+        # This is the value function V(s,a)
+        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
+        
+        #!!! DP adversary needs to correctly check it's location i.e. it needs to look for adversary not DM
+        # Initializing adversary agent
+        self.enemy = Level1DPAgent_Stationary(action_space=self.enemy_action_space,
+                   enemy_action_space=self.action_space,
+                   n_states=self.n_states,
+                   epsilon=self.epsilonB,
+                   gamma=self.gammaB,
+                   env=env)    
+        
+        #!!! Modify the transition model of the environment same as Level1DPAgent_Stationary so that this is able to correctly pull location based on if agent was initialized as DM or Adv
+        # Initialize an empty environment for simulation of steps 
+        #* Warning: Do not copy env to many times -> extreme memory and computational overhead (garbage collection)
+        self.env_snapshot = copy.deepcopy(env)
+        self.env_snapshot.blue_player_execution_prob = 1
+        self.env_snapshot.red_player_execution_prob = 1
+        
+        # Calculate P(edm,eadv | idm,iadv) - the 4D execution probability tensor
+        
+        # Break down possible combined actions of DM and Adversary into move and push
+        DM_action_details = self.env_snapshot.combined_actions_blue
+        Adv_action_details = self.env_snapshot.combined_actions_red
+        
+        # Saving number of DM and Adv actions
+        self.num_DM_actions = len(self.env_snapshot.combined_actions_blue)
+        self.num_Adv_actions = len(self.env_snapshot.combined_actions_red)
+
+        DM_moves = DM_action_details[:, 0]
+        DM_pushes = DM_action_details[:, 1]
+        Adv_moves = Adv_action_details[:, 0]
+        Adv_pushes = Adv_action_details[:, 1]
+        
+        # Initialize matrix for storing probabilities of action executing conditioned by intended action for DM (intended x executed)
+        prob_DM_part = np.zeros((self.num_DM_actions, self.num_DM_actions)) # P(edm|idm)
+        
+        # Creating a boolean matrix of intended x executed moves for probability assignment
+        DM_moves_match = (DM_moves[:, np.newaxis] == DM_moves[np.newaxis, :])
+        
+        # Creating a boolean matrix of intended x executed pushes for probability assignment
+        DM_pushes_match = (DM_pushes[:, np.newaxis] == DM_pushes[np.newaxis, :])
+        
+        # Setting probability for intended move AND push match executed move AND push
+        prob_DM_part[DM_moves_match & DM_pushes_match] = env.blue_player_execution_prob
+
+        # Setting probability for Intended push matches executed push, BUT intended move DOES NOT match executed move
+        num_alt_DM = len(env.available_move_actions_DM) - 1
+        
+        # Setting probability of unintended moves
+        prob_DM_part[~DM_moves_match & DM_pushes_match] = (1.0 - env.blue_player_execution_prob) / num_alt_DM
+        
+        # Other cases stay zero
+
+        # Initialize matrix for storing probabilities of action executing conditioned by intended action for Adv (intended x executed)
+        prob_Adv_part = np.zeros((self.num_Adv_actions, self.num_Adv_actions))
+        
+        # Creating a boolean matrix of intended x executed moves for probability assignment
+        Adv_moves_match = (Adv_moves[:, np.newaxis] == Adv_moves[np.newaxis, :])
+        
+        # Creating a boolean matrix of intended x executed pushes for probability assignment
+        Adv_pushes_match = (Adv_pushes[:, np.newaxis] == Adv_pushes[np.newaxis, :])
+        
+        # Setting probability for intended move AND push match executed move AND push
+        prob_Adv_part[Adv_moves_match & Adv_pushes_match] = env.red_player_execution_prob
+
+        # Setting probability for Intended push matches executed push, BUT intended move DOES NOT match executed move
+        num_alt_Adv = len(env.available_move_actions_Adv) - 1
+        
+        # Setting probability of unintended moves
+        prob_Adv_part[~Adv_moves_match & Adv_pushes_match] = (1.0 - env.red_player_execution_prob) / num_alt_Adv
+        
+        # Other cases stay zero
+        
+        # Combine to get 4D prob_exec_tensor: P[idm, iadv, edm, eadv]
+        # containing joint probabilities of Adv and DM executing an action conditioned by intended action
+        self.prob_exec_tensor = prob_DM_part[:, np.newaxis, :, np.newaxis] * prob_Adv_part[np.newaxis, :, np.newaxis, :]
+        
+    def reset_sim_env(self,env):
+        """
+        Resets the simulated environment to its initial state:
+        - Step counter is set to 0
+        - Player and coin positions are restored to their starting values
+        """
+        
+        # Reset the environment
+        self.env_snapshot.reset()
+        
+        # Player positions
+        self.env_snapshot.blue_player = env.blue_player.copy() 
+        self.env_snapshot.red_player = env.red_player.copy()
+        
+        # Coin availability
+        self.env_snapshot.coin1_available = env.coin1_available
+        self.env_snapshot.coin2_available = env.coin2_available
+        
+        # Player coin collection
+        self.env_snapshot.blue_collected_coin1 = env.blue_collected_coin1
+        self.env_snapshot.blue_collected_coin2 = env.blue_collected_coin2
+        self.env_snapshot.red_collected_coin1 = env.red_collected_coin1
+        self.env_snapshot.red_collected_coin2 = env.red_collected_coin2
+            
+    def act(self, obs, env):
+        
+        if np.random.rand() < self.epsilonA:
+            return np.random.choice(self.action_space)
+        else:
+
+            ## Determine reachable next states and their immediate rewards
+            
+            self.reset_sim_env(env)
+            executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
+            actual_next_states_set = set() # To store unique s_prime values
+
+            # Execute all actions with probab 1 to get reachable states and their rewards
+            for DM_exec_idx in range(self.num_DM_actions):
+                for Adv_exec_idx in range(self.num_Adv_actions):
+                    act_comb_executed = (DM_exec_idx, Adv_exec_idx)
+                    s_prime, rewards_vec, _ = self.env_snapshot.step(act_comb_executed)
+                    DM_reward_for_exec = rewards_vec[0]
+                    
+                    executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
+                    actual_next_states_set.add(s_prime)
+                    
+                    self.reset_sim_env(env) # Reset for the next simulation iteration
+            
+            unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
+
+            ## Calculate E[V(s',b')|s'] only for unique_s_primes
+            s_prime_to_expected_V = {}
+
+            # Index V and Dir only for the relevant next states
+            V_relevant = self.V[unique_s_primes, :]    # Shape: (len(unique_s_primes), num_Adv_actions)
+            #Dir_relevant = self.Dir[unique_s_primes, :] # Shape: (len(unique_s_primes), num_Adv_actions)
+            
+            eps_greed_enemy = np.array(self.n_states, len(self.enemy_action_space))
+            
+            ###!!! Need to package enemy optimal action into a method before proceeding
+
+            # Calculate normalization constant only for s which are relevant
+            dir_sum_relevant = np.sum(Dir_relevant, axis=1, keepdims=True)
+            
+            # Normalizing Dirichlet distribution only for relevant s
+            beliefs_Adv_action_relevant_s_prime = Dir_relevant / dir_sum_relevant
+            
+            # Calculating mean value of b's for each s. This part is not dependent on transition model and can be precalculated.
+            expected_V_values_for_unique_s_primes = np.sum(V_relevant * beliefs_Adv_action_relevant_s_prime, axis=1)
+            
+            # Save into dictionary for later lookup
+            for i, s_prime_idx in enumerate(unique_s_primes):
+                s_prime_to_expected_V[s_prime_idx] = expected_V_values_for_unique_s_primes[i]
+
+            # --- Prepare arrays of R(edm,eadv) and E[V(s'_from_edm,eadv)] ---
+            # These are rewards/values for *executed* actions.
+            DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
+            future_V_values_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions)) 
+
+            for DM_exec_idx in range(self.num_DM_actions):
+                for Adv_exec_idx in range(self.num_Adv_actions):
+                    # Get next state and reward of DM for executed actions
+                    s_prime, r_DM = executed_action_outcomes[(DM_exec_idx, Adv_exec_idx)]
+                    DM_rewards_executed_array[DM_exec_idx, Adv_exec_idx] = r_DM
+                    # Get E[V(s')|s'] from our map, default to 0 if s_prime somehow not found 
+                    future_V_values_executed_array[DM_exec_idx, Adv_exec_idx] = s_prime_to_expected_V.get(s_prime, 0.0)
+
+            # Perform sumproducts using np.einsum
+            
+            # Calculate expected reward r(s,a,b,s') with respect to p(s'|s,a,b)
+            expected_DM_rewards = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, DM_rewards_executed_array)
+
+            # Calculate the expectations of E[V(s',b')|s'] with respect to p(s'|s,a,b)
+            weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, future_V_values_executed_array)
+
+            # Final Action Selection
+            p_b_given_s_obs = self.Dir[obs] / np.sum(self.Dir[obs])
+            total_action_values = np.dot(expected_DM_rewards, p_b_given_s_obs) + self.gamma * np.dot(weighted_sum_future_V, p_b_given_s_obs)
+            
+            # Find indicies (actions) of all max values
+            max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
+
+            # Choose randomly among them
+            chosen_action = np.random.choice(max_indices)
+            
+            return chosen_action
+
+    def update(self, obs, actions, rewards, new_obs, env=None):
+        a, b = actions
+        rA, rB = rewards
+
+        self.enemy.update(obs, [b,a], [rB, rA], new_obs)
+
+        # We obtain opponent's next action (b') using Q_B
+        
+        # Adversary's Q-function
+        QB = self.enemy.get_Q_function()
+        
+        # Adversary's belief about DM's action (in form of weights)
+        Dir_B = self.enemy.get_Belief()
+        
+        # Calculate the mean value of adversarys Q-function with respect to Dir_B
+        mean_values_QB_p_B_a = np.dot(QB[new_obs], Dir_B[new_obs]/np.sum(Dir_B[new_obs]))
+        
+        # Calculate argmx b of the mean values of adversarys Q-function
+        Adversary_best_action = np.argmax(mean_values_QB_p_B_a)
+        
+        # Calculate DM's belief about adversary's action using epsilon-greedy policy
+        p_A_b = np.ones(len(self.enemy_action_space))
+        p_A_b.fill(self.epsilonB/(len(self.enemy_action_space)-1))
+        p_A_b[Adversary_best_action] = 1 - self.epsilonB
+        
+        # Calculate the mean value of DM's Q-function with respect to DM's belief about adversary's actions p_A_b
+        mean_values_QA_p_A_b = np.dot(self.QA[new_obs], p_A_b)
+        
+        # Finally we update the supported agent's Q-function
+        self.QA[obs, a, b] = (1 - self.alphaA)*self.QA[obs, a, b] + self.alphaA*(rA + self.gammaA*np.max(mean_values_QA_p_A_b))
         
 
 class Level2DPAgent(Agent):
