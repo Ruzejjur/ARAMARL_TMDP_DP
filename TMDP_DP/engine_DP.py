@@ -78,8 +78,8 @@ class CoinGame():
         p2 = self.red_player[0] + self.N * self.red_player[1]    # Red player's position
         
         # Radix encoding:
-        # Max values: p_flat=N*N-1, c_avail=1, collected_count=2
-        # Order: P1_pos, P2_pos, C1_avail, C2_avail, P1_coll_count, P2_coll_count
+        # Max values: p_flat=N*N-1, P_*_coll_coin = 1
+        # Order: P1_pos, P2_pos, P_1_coll_coin
         base_pos = self.N * self.N
         base_coll = 2 # 0 or 1 for each coin
 

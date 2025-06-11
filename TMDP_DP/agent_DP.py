@@ -355,29 +355,55 @@ class Level1DPAgent(Agent):
         self.env_snapshot.red_player_execution_prob = 1
 
     
-    def reset_sim_env(self,env):
+    def reset_sim_env(self, obs):
         """
-        Resets the simulated environment to its initial state:
-        - Step counter is set to 0
-        - Player and coin positions are restored to their starting values
+        Resets the simulated environment to the state represented by 'obs'.
+        - Player and coin positions and collection status are restored from 'obs'.
+        - Step counter is reset (as per self.env_snapshot.reset()).
         """
-        
-        # Reset the environment
+        # Reset the environment to a default initial state first
         self.env_snapshot.reset()
+
+        # Radix decoding of the state ID 'obs'
+        base_pos = self.env_snapshot.N * self.env_snapshot.N
+        base_coll = 2  # 0 or 1 for each coin
+
+        # Decode collected coin flags (in reverse order of encoding)
+        self.env_snapshot.red_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.red_collected_coin1 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.blue_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.blue_collected_coin1 = bool(obs % base_coll) 
+        obs //= base_coll
+
+        # Decode player positions
+        p2_flat = obs % base_pos  # Red player's flattened position
+        obs //= base_pos
         
-        # Player positions
-        self.env_snapshot.blue_player = env.blue_player.copy() 
-        self.env_snapshot.red_player = env.red_player.copy()
+        p1_flat = obs  # Blue player's flattened position
+
+        # Convert flattened positions back to 2D coordinates
+        # p_flat = row + N * col
+        blue_player_col = p1_flat // self.env_snapshot.N
+        blue_player_row = p1_flat % self.env_snapshot.N
         
-        # Coin availability
-        self.env_snapshot.coin1_available = env.coin1_available
-        self.env_snapshot.coin2_available = env.coin2_available
+        # Setting blue player to coordinates extracted from state obs
+        self.env_snapshot.blue_player = np.array([blue_player_row, blue_player_col])
+
+        red_player_col = p2_flat // self.env_snapshot.N
+        red_player_row = p2_flat % self.env_snapshot.N
         
-        # Player coin collection
-        self.env_snapshot.blue_collected_coin1 = env.blue_collected_coin1
-        self.env_snapshot.blue_collected_coin2 = env.blue_collected_coin2
-        self.env_snapshot.red_collected_coin1 = env.red_collected_coin1
-        self.env_snapshot.red_collected_coin2 = env.red_collected_coin2
+        # Setting red player to coordinates extracted from state obs
+        self.env_snapshot.red_player = np.array([red_player_row, red_player_col])
+        
+        # Set coin availability based on decoded collection status
+        self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
+        self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
         
         
     def act(self, obs, env):
@@ -391,7 +417,7 @@ class Level1DPAgent(Agent):
 
             ## Determine reachable next states and their immediate rewards
             
-            self.reset_sim_env(env)
+            self.reset_sim_env(obs)
             executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
             actual_next_states_set = set() # To store unique s_prime values
 
@@ -405,7 +431,7 @@ class Level1DPAgent(Agent):
                     executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
                     actual_next_states_set.add(s_prime)
                     
-                    self.reset_sim_env(env) # Reset for the next simulation iteration
+                    self.reset_sim_env(obs) # Reset for the next simulation iteration
             
             unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
 
@@ -532,7 +558,7 @@ class Level1DPAgent(Agent):
             num_DM_actions = len(self.env_snapshot.combined_actions_blue)
             num_Adv_actions = len(self.env_snapshot.combined_actions_red)
 
-            self.reset_sim_env(env) # Set snapshot to current 'obs'
+            self.reset_sim_env(obs) # Set snapshot to current 'obs'
             
             executed_action_outcomes = {} # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
             actual_next_states_set = set() # To store unique s_prime values
@@ -547,7 +573,7 @@ class Level1DPAgent(Agent):
                     executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
                     actual_next_states_set.add(s_prime)
                     
-                    self.reset_sim_env(env)# Reset for the next simulation iteration
+                    self.reset_sim_env(obs)# Reset for the next simulation iteration
             
             unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
             
@@ -752,35 +778,61 @@ class Level1DPAgent_Stationary(Agent):
         # Combine to get 4D prob_exec_tensor: P[idm, iadv, edm, eadv]
         # containing joint probabilities of Adv and DM executing an action conditioned by intended action
         self.prob_exec_tensor = prob_DM_part[:, np.newaxis, :, np.newaxis] * prob_Adv_part[np.newaxis, :, np.newaxis, :]
-    
-    def reset_sim_env(self,env):
-        """
-        Resets the simulated environment to its initial state:
-        - Step counter is set to 0
-        - Player and coin positions are restored to their starting values
-        """
         
-        # Reset the environment
+    def reset_sim_env(self, obs):
+        """
+        Resets the simulated environment to the state represented by 'obs'.
+        - Player and coin positions and collection status are restored from 'obs'.
+        - Step counter is reset (as per self.env_snapshot.reset()).
+        """
+        # Reset the environment to a default initial state first
         self.env_snapshot.reset()
+
+        # Radix decoding of the state ID 'obs'
+        base_pos = self.env_snapshot.N * self.env_snapshot.N
+        base_coll = 2  # 0 or 1 for each coin
+
+        # Decode collected coin flags (in reverse order of encoding)
+        self.env_snapshot.red_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.red_collected_coin1 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.blue_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.blue_collected_coin1 = bool(obs % base_coll) 
+        obs //= base_coll
+
+        # Decode player positions
+        p2_flat = obs % base_pos  # Red player's flattened position
+        obs //= base_pos
         
-        # Player positions
-        self.env_snapshot.blue_player = env.blue_player.copy() 
-        self.env_snapshot.red_player = env.red_player.copy()
+        p1_flat = obs  # Blue player's flattened position
+
+        # Convert flattened positions back to 2D coordinates
+        # p_flat = row + N * col
+        blue_player_col = p1_flat // self.env_snapshot.N
+        blue_player_row = p1_flat % self.env_snapshot.N
         
-        # Coin availability
-        self.env_snapshot.coin1_available = env.coin1_available
-        self.env_snapshot.coin2_available = env.coin2_available
+        # Setting blue player to coordinates extracted from state obs
+        self.env_snapshot.blue_player = np.array([blue_player_row, blue_player_col])
+
+        red_player_col = p2_flat // self.env_snapshot.N
+        red_player_row = p2_flat % self.env_snapshot.N
         
-        # Player coin collection
-        self.env_snapshot.blue_collected_coin1 = env.blue_collected_coin1
-        self.env_snapshot.blue_collected_coin2 = env.blue_collected_coin2
-        self.env_snapshot.red_collected_coin1 = env.red_collected_coin1
-        self.env_snapshot.red_collected_coin2 = env.red_collected_coin2
+        # Setting red player to coordinates extracted from state obs
+        self.env_snapshot.red_player = np.array([red_player_row, red_player_col])
+        
+        # Set coin availability based on decoded collection status
+        self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
+        self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
     
     def optim_act(self, obs, env): 
 
             ## Determine reachable next states and their immediate rewards
-            self.reset_sim_env(env)
+            self.reset_sim_env(obs)
             executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
             actual_next_states_set = set() # To store unique s_prime values
 
@@ -794,7 +846,7 @@ class Level1DPAgent_Stationary(Agent):
                     executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
                     actual_next_states_set.add(s_prime)
                     
-                    self.reset_sim_env(env) # Reset for the next simulation iteration
+                    self.reset_sim_env(obs) # Reset for the next simulation iteration
             
             unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
 
@@ -872,7 +924,7 @@ class Level1DPAgent_Stationary(Agent):
             # This is the expected value of next states, considering opponent's policy in those next states.
             # This code is largely the same as in act().
 
-            self.reset_sim_env(env) # Set snapshot to current 'obs'
+            self.reset_sim_env(obs) # Set snapshot to current 'obs'
             
             executed_action_outcomes = {} # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
             actual_next_states_set = set() # To store unique s_prime values
@@ -887,7 +939,7 @@ class Level1DPAgent_Stationary(Agent):
                     executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
                     actual_next_states_set.add(s_prime)
                     
-                    self.reset_sim_env(env)# Reset for the next simulation iteration
+                    self.reset_sim_env(obs)# Reset for the next simulation iteration
             
             unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
             
@@ -1043,34 +1095,60 @@ class Level2DPAgent_Stationary(Agent):
         # containing joint probabilities of Adv and DM executing an action conditioned by intended action
         self.prob_exec_tensor = prob_DM_part[:, np.newaxis, :, np.newaxis] * prob_Adv_part[np.newaxis, :, np.newaxis, :]
         
-    def reset_sim_env(self,env):
+    def reset_sim_env(self, obs):
         """
-        Resets the simulated environment to its initial state:
-        - Step counter is set to 0
-        - Player and coin positions are restored to their starting values
+        Resets the simulated environment to the state represented by 'obs'.
+        - Player and coin positions and collection status are restored from 'obs'.
+        - Step counter is reset (as per self.env_snapshot.reset()).
         """
-        
-        # Reset the environment
+        # Reset the environment to a default initial state first
         self.env_snapshot.reset()
+
+        # Radix decoding of the state ID 'obs'
+        base_pos = self.env_snapshot.N * self.env_snapshot.N
+        base_coll = 2  # 0 or 1 for each coin
+
+        # Decode collected coin flags (in reverse order of encoding)
+        self.env_snapshot.red_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.red_collected_coin1 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.blue_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+
+        self.env_snapshot.blue_collected_coin1 = bool(obs % base_coll)
+        obs //= base_coll
+
+        # Decode player positions
+        p2_flat = obs % base_pos  # Red player's flattened position
+        obs //= base_pos
         
-        # Player positions
-        self.env_snapshot.blue_player = env.blue_player.copy() 
-        self.env_snapshot.red_player = env.red_player.copy()
+        p1_flat = obs % base_pos  # Blue player's flattened position (or simply obs)
+
+        # Convert flattened positions back to 2D coordinates
+        # p_flat = row + N * col
+        blue_player_col = p1_flat // self.env_snapshot.N
+        blue_player_row = p1_flat % self.env_snapshot.N
         
-        # Coin availability
-        self.env_snapshot.coin1_available = env.coin1_available
-        self.env_snapshot.coin2_available = env.coin2_available
+        # Setting blue player to coordinates extracted from state obs
+        self.env_snapshot.blue_player = np.array([blue_player_row, blue_player_col])
+
+        red_player_col = p2_flat // self.env_snapshot.N
+        red_player_row = p2_flat % self.env_snapshot.N
         
-        # Player coin collection
-        self.env_snapshot.blue_collected_coin1 = env.blue_collected_coin1
-        self.env_snapshot.blue_collected_coin2 = env.blue_collected_coin2
-        self.env_snapshot.red_collected_coin1 = env.red_collected_coin1
-        self.env_snapshot.red_collected_coin2 = env.red_collected_coin2
+        # Setting red player to coordinates extracted from state obs
+        self.env_snapshot.red_player = np.array([red_player_row, red_player_col])
+        
+        # Set coin availability based on decoded collection status
+        self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
+        self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
     
     def optim_act(self, obs, env):
             ## Determine reachable next states and their immediate rewards
             
-            self.reset_sim_env(env)
+            self.reset_sim_env(obs)
             executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
             actual_next_states_set = set() # To store unique s_prime values
 
@@ -1084,7 +1162,7 @@ class Level2DPAgent_Stationary(Agent):
                     executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
                     actual_next_states_set.add(s_prime)
                     
-                    self.reset_sim_env(env) # Reset for the next simulation iteration
+                    self.reset_sim_env(obs) # Reset for the next simulation iteration
             
             unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
 
