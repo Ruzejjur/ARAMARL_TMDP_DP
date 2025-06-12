@@ -705,6 +705,9 @@ class Level1DPAgent_Stationary(Agent):
         self.gamma = gamma
         self.player_id = player_id
         
+        # A flag which indicates that the simulation and calculation of E[V(s',b')|s'] has already been run in this episode
+        self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime_flag = False
+        
         self.enemy_action_space = enemy_action_space
         
         # This is the value function V(s,a)
@@ -752,6 +755,11 @@ class Level1DPAgent_Stationary(Agent):
             
             DM_execution_prob = env.red_player_execution_prob
             Adv_execution_prob = env.blue_player_execution_prob
+            
+        # Initialize array for executed action reward (executed action == moving to state s')
+        self.DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
+        # Initialize array for calculation of E[V(s',b')|s']
+        self.future_V_values_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
         
         DM_moves = DM_action_details[:, 0]
         DM_pushes = DM_action_details[:, 1]
@@ -851,9 +859,11 @@ class Level1DPAgent_Stationary(Agent):
         # Set coin availability based on decoded collection status
         self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
         self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
-    
-    def optim_act(self, obs): 
-
+        
+    def simulate_action_outcomes_and_calculate_expected_value_in_s_prime(self, obs):
+        
+        # Run only if it was not already ran in this episode
+        if not self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime_flag:
             ## Determine reachable next states and their immediate rewards
             self.reset_sim_env(obs)
             executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
@@ -909,14 +919,19 @@ class Level1DPAgent_Stationary(Agent):
                     DM_rewards_executed_array[DM_exec_idx, Adv_exec_idx] = r_DM
                     # Get E[V(s')|s'] from our map, default to 0 if s_prime somehow not found 
                     future_V_values_executed_array[DM_exec_idx, Adv_exec_idx] = s_prime_to_expected_V.get(s_prime, 0.0)
-
+            
+            self.DM_rewards_executed_array = DM_rewards_executed_array
+            self.future_V_values_executed_array = future_V_values_executed_array
+    
+    def optim_act(self, obs): 
+            
             # Perform sumproducts using np.einsum
             
             # Calculate expected reward r(s,a,b,s') with respect to p(s'|s,a,b)
-            expected_DM_rewards = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, DM_rewards_executed_array)
+            expected_DM_rewards = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.DM_rewards_executed_array)
 
             # Calculate the expectations of E[V(s',b')|s'] with respect to p(s'|s,a,b)
-            weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, future_V_values_executed_array)
+            weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.future_V_values_executed_array)
 
             # Final Action Selection
             p_b_given_s_obs = self.Dir[obs] / np.sum(self.Dir[obs])
@@ -933,10 +948,13 @@ class Level1DPAgent_Stationary(Agent):
     def act(self, obs, env):
         "Epsilon greedy action selection strategy."
         
+        self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime(obs)
+        # Set flag to True
+        self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime_flag = True
+        
         if np.random.rand() < self.epsilon:
             return np.random.choice(self.action_space)
         else:
-    
             return self.optim_act(obs)
         
     def update(self, obs, actions, rewards, new_obs, env):
@@ -953,61 +971,10 @@ class Level1DPAgent_Stationary(Agent):
             # --- Calculate E[V(s',b_opp')|s'] ---
             # This is the expected value of next states, considering opponent's policy in those next states.
             # This code is largely the same as in act().
-
-            self.reset_sim_env(obs) # Set snapshot to current 'obs'
             
-            executed_action_outcomes = {} # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
-            actual_next_states_set = set() # To store unique s_prime values
+            # We already calculated this part in the act method which is ran 
             
-            # Execute all actions with probab 1 to get reachable states and their rewards
-            for DM_exec_idx in range(self.num_DM_actions):
-                for Adv_exec_idx in range(self.num_Adv_actions):
-                    act_comb_executed = (DM_exec_idx, Adv_exec_idx)
-                    s_prime, rewards_vec_exec, _ = self.env_snapshot.step(act_comb_executed)
-                    
-                    if self.player_id == 0:
-                        DM_reward_for_exec = rewards_vec_exec[0]
-                    else: 
-                        DM_reward_for_exec = rewards_vec_exec[1]
-                    
-                    executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
-                    actual_next_states_set.add(s_prime)
-                    
-                    self.reset_sim_env(obs)# Reset for the next simulation iteration
-            
-            unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
-            
-            ## Calculate E[V(s',b')|s'] only for unique_s_primes
-            s_prime_to_expected_V = {} # Maps s_prime_idx -> E_{b_opp'}[V(s_prime, b_opp')]
-            
-            # Index V and Dir only for the relevant next states
-            V_relevant = self.V[unique_s_primes, :] # Shape: (len(unique_s_primes), num_Adv_actions)
-            Dir_relevant = self.Dir[unique_s_primes, :] # Shape: (len(unique_s_primes), num_Adv_actions)
-            
-            # Calculate normalization constant only for s which are relevant
-            dir_sum_relevant = np.sum(Dir_relevant, axis=1, keepdims=True)
-            
-            # Normalizing Dirichlet distribution only for relevant s
-            beliefs_Adv_action_relevant_s_prime = Dir_relevant / dir_sum_relevant
-            
-            # Calculating mean value of b's for each s. This part is not dependent on transition model and can be precalculated.
-            expected_V_values_for_unique_s_primes = np.sum(V_relevant * beliefs_Adv_action_relevant_s_prime, axis=1)
-            
-            for i, s_prime_idx in enumerate(unique_s_primes):
-                s_prime_to_expected_V[s_prime_idx] = expected_V_values_for_unique_s_primes[i]
-
-            # --- Prepare arrays of R(edm,eadv) and E[V(s'_from_edm,eadv)] ---
-            # These are rewards/values for *executed* actions.
-            DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
-            future_V_values_for_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
-            
-            for DM_exec_idx in range(self.num_DM_actions):
-                for Adv_exec_idx in range(self.num_Adv_actions):
-                    # Get next state and reward of DM for executed actions
-                    s_prime, r_DM = executed_action_outcomes[(DM_exec_idx, Adv_exec_idx)]
-                    DM_rewards_executed_array[DM_exec_idx, Adv_exec_idx] = r_DM
-                    # Get E[V(s')|s'] from our map, default to 0 if s_prime somehow not found 
-                    future_V_values_for_executed_array[DM_exec_idx, Adv_exec_idx] = s_prime_to_expected_V.get(s_prime, 0.0)
+            self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime(obs)
 
             # Calculate Q(obs, a_dm_intended, b_opp_taken_in_obs) for ALL a_dm_intended ---
             # We need to find the best DM response 'a_dm_intended' if opponent plays 'b_opp_taken_in_obs'.
@@ -1017,11 +984,11 @@ class Level1DPAgent_Stationary(Agent):
             
             # E[Reward | obs, idm, b_opp_taken_in_obs] = sum_{edm,eadv} P(edm,eadv | idm, b_opp_taken_in_obs) * R(edm,eadv)
             # Output shape: (num_DM_actions_intended,)
-            expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, DM_rewards_executed_array)
+            expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, self.DM_rewards_executed_array)
             
             # E[Future_V | obs, idm, b_opp_taken_in_obs] = sum_{edm,eadv} P(edm,eadv | idm, b_opp_taken_in_obs) * E[V(s'_from_edm,eadv)]
             # Output shape: (num_DM_actions_intended,)
-            expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, future_V_values_for_executed_array)
+            expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, self.future_V_values_executed_array)
             
             # Q_values[idm] = Q(obs, idm, b_opp_taken_in_obs)
             Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
@@ -1030,7 +997,10 @@ class Level1DPAgent_Stationary(Agent):
             self.V[obs, b_opp_taken_in_obs] = np.max(Q_values_for_dm_intentions)
 
             # Update the Dirichlet model for the opponent's observed action
-            self.Dir[obs, b_opp_taken_in_obs] += 1              
+            self.Dir[obs, b_opp_taken_in_obs] += 1         
+            
+            # Set flag for simulation of outcomes to false for next episode 
+            self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime_flag = False     
         
 class Level2DPAgent_Stationary(Agent):
     """
@@ -1366,84 +1336,5 @@ class Level2DPAgent_Stationary(Agent):
             # Update V(obs, b_opp_taken_in_obs) with the max Q-value (DM plays optimally against b_opp_taken_in_obs)
             self.V[obs, b_opp_taken_in_obs] = np.max(Q_values_for_dm_intentions)
         
-
-class Level2DPAgent(Agent):
-    """
-    A value iteration agent that treats the other player as a level 1 agent.
-    She learns from other's actions, estimating their value function.
-    She represents value function in a tabular form, i.e., using a matrix V.
-    """
-
-    def __init__(self, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, reward_table, system_model):
-        Agent.__init__(self, action_space)
-
-        self.n_states = n_states
-        self.epsilonA = epsilon
-        self.epsilonB = self.epsilonA
-        self.gammaA = gamma
-        self.gammaB = self.gammaA
-        # Value iteration does not impement learning rate, leaving for coherence with definition of other agents
-        self.learning_rate = None
-
-        self.action_space = action_space
-        self.enemy_action_space = enemy_action_space
-        
-        # Environment atributes know to the agent
-        self.reward_table = reward_table
-        self.system_model = system_model
-
-        ## Other agent
-        self.enemy = Level1DPAgent(self.enemy_action_space, self.action_space, self.n_states, learning_rate=None,
-                                   epsilon=self.epsilonB, gamma=self.gammaB, reward_table = self.reward_table,
-                                   system_model = self.system_model)
-
-        # This is the value function V(s, b) (i.e, the supported DM value function)
-        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
-        
-    def extract_epsilon_greedy(self): 
-        """Extracts the epsilon-greedy policy from the level-1 agent for all possible states."""
-        other_agent_chosen_action_for_each_state = np.zeros(self.n_states)
-        for obs in range(self.n_states):
-            other_agent_chosen_action_for_each_state[obs] = self.enemy.act(obs, None)
-        
-        eps_greedy = np.ones((self.n_states, len(self.enemy_action_space))) * self.epsilonB / (len(self.enemy_action_space) - 1)
-        
-        for obs in range(self.n_states):
-            eps_greedy[obs, other_agent_chosen_action_for_each_state[obs]] = 1 - self.epsilonB
-        
-        return eps_greedy
-
-    def act(self, obs, env):
-
-            eps_greedy_policy_level_1_agent = self.extract_epsilon_greedy()
-            
-            aux1 = np.sum(self.V * eps_greedy_policy_level_1_agent, axis=1)
-            
-            # TODO: subset of self.system model is a bxs matrix adjust after definition of system model in the environment
-            aux2 = np.tensordot(aux1, self.system_model[obs,:,:,:], axes=([0], [3]))
-            
-            # TODO: If aux2 is redefined modify this also
-            aux3 = np.tensordot(self.reward_table[obs, :, :] + self.gammaA*aux2, eps_greedy_policy_level_1_agent[obs], axes=([2], [0]))
-            
-            selected_action = np.argmax(aux3)
-            
-            return selected_action
-
-    def update(self, obs, actions, rewards, new_obs, env):
-        """Update of the value function of level-2 agent"""
-        # Extract actions of the DM and the Adversary respectively
-        # a, b = actions
-        
-        # self.enemy.update(obs, [a,b], None, None)
-
-        # eps_greedy_policy_level_1_agent = self.extract_epsilon_greedy()
-        
-        # aux1 = np.sum(self.V * eps_greedy_policy_level_1_agent, axis=1)
-        
-        # # TODO: subset of self.system model is a axs matrix adjust after definition of system model in the environment
-        # aux2 = np.tensordot(aux1, self.system_model[obs,:,b,:], axes=([0], [3]))
-        
-        # # Update the value function of the level-2 agent (DM)
-        # self.V[obs, b] = np.max(self.reward_table[obs, :, b] + self.gammaA*aux2)
 
     
