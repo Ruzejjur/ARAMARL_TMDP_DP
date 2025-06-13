@@ -859,8 +859,8 @@ class Level1DPAgent_Stationary(Agent):
         # Set coin availability based on decoded collection status
         self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
         self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
-        
-    def simulate_action_outcomes_and_calculate_expected_value_in_s_prime(self, obs):
+    
+    def simulate_action_outcomes(self, obs):
         
         # Run only if it was not already ran in this episode
         if not self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime_flag:
@@ -885,6 +885,10 @@ class Level1DPAgent_Stationary(Agent):
                     
                     self.reset_sim_env(obs) # Reset for the next simulation iteration
             
+            self.calculate_expecte_value_in_s_prime(actual_next_states_set, executed_action_outcomes)
+            
+    def calculate_expecte_value_in_s_prime(self, actual_next_states_set, executed_action_outcomes):
+        
             unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
 
             ## Calculate E[V(s',b')|s'] only for unique_s_primes
@@ -948,7 +952,7 @@ class Level1DPAgent_Stationary(Agent):
     def act(self, obs, env):
         "Epsilon greedy action selection strategy."
         
-        self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime(obs)
+        self.simulate_action_outcomes(obs)
         # Set flag to True
         self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime_flag = True
         
@@ -974,7 +978,7 @@ class Level1DPAgent_Stationary(Agent):
             
             # We already calculated this part in the act method which is ran 
             
-            self.simulate_action_outcomes_and_calculate_expected_value_in_s_prime(obs)
+            self.simulate_action_outcomes(obs)
 
             # Calculate Q(obs, a_dm_intended, b_opp_taken_in_obs) for ALL a_dm_intended ---
             # We need to find the best DM response 'a_dm_intended' if opponent plays 'b_opp_taken_in_obs'.
