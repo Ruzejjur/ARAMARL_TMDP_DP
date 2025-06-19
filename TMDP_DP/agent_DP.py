@@ -29,7 +29,7 @@ class Agent():
         """
         raise NotImplementedError()
 
-    def update(self, obs, actions, rewards, new_obs, env):
+    def update(self, obs, actions, rewards, new_obs):
         """
         This is after an interaction has ocurred, ie all agents have done their respective actions, observed their rewards and arrived at
         a new observation (state).
@@ -80,7 +80,7 @@ class IndQLearningAgent(Agent):
         else:
             return self.action_space[np.argmax(self.Q[obs, :])]
 
-    def update(self, obs, actions, rewards, new_obs, env=None):
+    def update(self, obs, actions, rewards, new_obs):
         """The vanilla Q-learning update rule"""
         a0, _ = actions
         r0, _ = rewards
@@ -129,7 +129,7 @@ class Level1QAgent(Agent):
         else:
             return self.action_space[np.argmax(np.dot(self.Q[obs], self.Dir[obs]/np.sum(self.Dir[obs])))]
 
-    def update(self, obs, actions, rewards, new_obs, env=None):
+    def update(self, obs, actions, rewards, new_obs):
         
         a0, a1 = actions
         r0, _ = rewards
@@ -227,7 +227,7 @@ class Level2QAgent(Agent):
             
             return Agent_best_action
 
-    def update(self, obs, actions, rewards, new_obs, env=None):
+    def update(self, obs, actions, rewards, new_obs):
         a, b = actions
         rA, rB = rewards
 
@@ -296,7 +296,7 @@ class Level2QAgentSoftmax(Level2QAgent):
         # Return calculated DM's best action using softmax policy
         return choice(self.action_space, p=p_A_softmax_selection)
     
-    def update(self, obs, actions, rewards, new_obs, env=None):
+    def update(self, obs, actions, rewards, new_obs):
         a, b = actions
         rA, rB = rewards
 
@@ -624,7 +624,7 @@ class Level1DPAgent_Stationary(Agent):
         else:
             return self.optim_act(obs)
         
-    def update(self, obs, actions, rewards, new_obs, env):
+    def update(self, obs, actions, rewards, new_obs):
             # obs: current state where actions were taken
             # actions: tuple [a_dm_actually_taken, b_opp_actually_taken]
             # rewards, new_obs: not directly used for this type of V(s,b_opp) update,
@@ -959,7 +959,6 @@ class Level1DPAgent_NonStationary(Agent):
             
         self.prob_exec_tensor = self._calculate_execution_probabilities(env)
                                          
-        
         self._simulate_executed_outcomes(obs)
         
         # Set flag to True
@@ -970,7 +969,7 @@ class Level1DPAgent_NonStationary(Agent):
         else:
             return self.optim_act(obs)
         
-    def update(self, obs, actions, rewards, new_obs, env):
+    def update(self, obs, actions, rewards, new_obs):
             # obs: current state where actions were taken
             # actions: tuple [a_dm_actually_taken, b_opp_actually_taken]
             # rewards, new_obs: not directly used for this type of V(s,b_opp) update,
@@ -985,7 +984,7 @@ class Level1DPAgent_NonStationary(Agent):
             # This is the expected value of next states, considering opponent's policy in those next states.
             # This code is largely the same as in act().
             
-            # We already calculated this part in the act method which is ran 
+            # We already calculated this part in the act method
             
             self._simulate_executed_outcomes(obs)
 
@@ -1315,7 +1314,7 @@ class Level1DPAgent_Dynamic(Agent):
         else:
             return self.optim_act(obs)
         
-    def update(self, obs, actions, rewards, new_obs, env):
+    def update(self, obs, actions, rewards, new_obs):
             # obs: current state where actions were taken
             # actions: tuple [a_dm_actually_taken, b_opp_actually_taken]
             # rewards, new_obs: not directly used for this type of V(s,b_opp) update,
@@ -1623,13 +1622,13 @@ class Level2DPAgent_Stationary(Agent):
             return self.optim_act(obs)
  
 
-    def update(self, obs, actions, rewards, new_obs, env):
+    def update(self, obs, actions, rewards, new_obs):
             # obs: current state where actions were taken
             # actions: tuple [a_dm_actually_taken, b_opp_actually_taken]
             # rewards, new_obs: not directly used for this type of V(s,b_opp) update,
             #                   as it's a model-based VI-like update based on current V and model.
 
-            self.enemy.update(obs, actions, rewards, new_obs, env)
+            self.enemy.update(obs, actions, rewards, new_obs)
 
             # if self.player_id == 0:
             b_opp_taken_in_obs = actions[1] # The opponent's action we observed in 'obs'
