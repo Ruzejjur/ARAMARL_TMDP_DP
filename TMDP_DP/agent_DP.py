@@ -324,355 +324,6 @@ class Level2QAgentSoftmax(Level2QAgent):
         
 ### ============ Dynamic programming agents - value iteration ============
 
-
-class Level1DPAgent_Stationary(Agent):
-    """
-    A value iteration agent that treats the other player as a level 0 agent.
-    She learns from other's actions, estimating their value function.
-    She represents value function in a tabular form, i.e., using a matrix.
-    Stationary in this case means that the agent has full information about transition distribution and precalculates it befefore running act() and update()
-    """
-
-    def __init__(self, action_space, enemy_action_space, n_states, epsilon, gamma, player_id, env):
-        Agent.__init__(self, action_space)
-
-        self.n_states = n_states
-        self.epsilon = epsilon
-        self.gamma = gamma
-        self.player_id = player_id
-        
-        # Flag to ensure simulation and expected value calculation runs only once per step
-        self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag = False
-        
-        self.enemy_action_space = enemy_action_space
-        
-        # This is the value function V(s,a)
-        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
-        
-        # Parameters of the Dirichlet distribution used to model the other agent
-        # Initialized using a uniform prior
-        self.Dir = np.ones((self.n_states, len(self.enemy_action_space)))
-        
-        # Initialize an empty environment for simulation of steps 
-        #* Warning: Do not copy env to many times -> extreme memory and computational overhead (garbage collection)
-        self.env_snapshot = copy.deepcopy(env)
-        self.env_snapshot.blue_player_execution_prob = 1
-        self.env_snapshot.red_player_execution_prob = 1
-        
-        # Calculate P(edm,eadv | idm,iadv) - the 4D execution probability tensor
-        
-        # Break down possible combined actions of DM and Adversary into move and push
-        if self.player_id == 0:
-            DM_action_details = self.env_snapshot.combined_actions_blue
-            Adv_action_details = self.env_snapshot.combined_actions_red
-            
-            DM_available_move_actions_num = len(env.available_move_actions_DM)
-            Adv_available_move_actions_num = len(env.available_move_actions_Adv)
-            
-            # Saving number of DM and Adv actions
-            self.num_DM_actions = len(self.env_snapshot.combined_actions_blue)
-            self.num_Adv_actions = len(self.env_snapshot.combined_actions_red)
-            
-            
-            
-            DM_execution_prob = env.blue_player_execution_prob
-            Adv_execution_prob = env.red_player_execution_prob
-            
-        else: 
-            DM_action_details = self.env_snapshot.combined_actions_red
-            Adv_action_details = self.env_snapshot.combined_actions_blue
-            
-            DM_available_move_actions_num = len(env.available_move_actions_Adv)
-            Adv_available_move_actions_num = len(env.available_move_actions_DM)
-            
-            # Saving number of DM and Adv actions
-            self.num_DM_actions = len(self.env_snapshot.combined_actions_red)
-            self.num_Adv_actions = len(self.env_snapshot.combined_actions_blue)
-            
-            DM_execution_prob = env.red_player_execution_prob
-            Adv_execution_prob = env.blue_player_execution_prob
-            
-        # Initialize array for executed action reward (executed action == moving to state s')
-        self.DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
-        # Initialize array for calculation of E[V(s',b')|s']
-        self.future_V_values_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
-        
-        # Pre-calculate the state transition probabilities based on execution probabilities
-        self.prob_exec_tensor = self._calculate_execution_probabilities(DM_action_details, Adv_action_details,
-                                         DM_execution_prob, Adv_execution_prob,
-                                         DM_available_move_actions_num, Adv_available_move_actions_num)
-        
- 
-        
-    def reset_sim_env(self, obs):
-        """
-        Resets the simulated environment to the state represented by 'obs'.
-        - Player and coin positions and collection status are restored from 'obs'.
-        - Step counter is reset (as per self.env_snapshot.reset()).
-        """
-        # is implicitly called by setting player/coin positions
-        self.env_snapshot.reset()
-
-        # Radix decoding of the state ID 'obs'
-        base_pos = self.env_snapshot.N * self.env_snapshot.N
-        base_coll = 2  # 0 or 1 for each coin
-
-        # Decode collected coin flags (in reverse order of encoding)
-        self.env_snapshot.red_collected_coin2 = bool(obs % base_coll)
-        obs //= base_coll
-
-        self.env_snapshot.red_collected_coin1 = bool(obs % base_coll)
-        obs //= base_coll
-
-        self.env_snapshot.blue_collected_coin2 = bool(obs % base_coll)
-        obs //= base_coll
-
-        self.env_snapshot.blue_collected_coin1 = bool(obs % base_coll) 
-        obs //= base_coll
-
-        # Decode player positions
-        p2_flat = obs % base_pos  # Red player's flattened position
-        obs //= base_pos
-        
-        p1_flat = obs  # Blue player's flattened position
-
-        # Convert flattened positions back to 2D coordinates
-        # p_flat = row + N * col
-        blue_player_col = p1_flat // self.env_snapshot.N
-        blue_player_row = p1_flat % self.env_snapshot.N
-        
-        # Setting blue player to coordinates extracted from state obs
-        self.env_snapshot.blue_player = np.array([blue_player_row, blue_player_col])
-
-        red_player_col = p2_flat // self.env_snapshot.N
-        red_player_row = p2_flat % self.env_snapshot.N
-        
-        # Setting red player to coordinates extracted from state obs
-        self.env_snapshot.red_player = np.array([red_player_row, red_player_col])
-        
-        # Set coin availability based on decoded collection status
-        self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
-        self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
-    
-    def _calculate_execution_probabilities(self,DM_action_details, Adv_action_details,
-                                         DM_execution_prob, Adv_execution_prob,
-                                         DM_available_move_actions_num, Adv_available_move_actions_num):
-        """
-        Pre-calculates the 4D tensor of execution probabilities:
-        P[idm, iadv, edm, eadv] = P(edm, eadv | idm, iadv)
-        where i = intended, e = executed, dm = decision maker, adv = adversary.
-        """
-        
-        DM_moves = DM_action_details[:, 0]
-        DM_pushes = DM_action_details[:, 1]
-        Adv_moves = Adv_action_details[:, 0]
-        Adv_pushes = Adv_action_details[:, 1]
-        
-        # Initialize matrix for storing probabilities of action executing conditioned by intended action for DM (intended x executed)
-        prob_DM_part = np.zeros((self.num_DM_actions, self.num_DM_actions)) # P(edm|idm)
-        
-        # Creating a boolean matrix of intended x executed moves for probability assignment
-        DM_moves_match = (DM_moves[:, np.newaxis] == DM_moves[np.newaxis, :])
-        
-        # Creating a boolean matrix of intended x executed pushes for probability assignment
-        DM_pushes_match = (DM_pushes[:, np.newaxis] == DM_pushes[np.newaxis, :])
-        
-        # Setting probability for intended move AND push match executed move AND push
-        prob_DM_part[DM_moves_match & DM_pushes_match] = DM_execution_prob
-
-        # Setting probability for Intended push matches executed push, BUT intended move DOES NOT match executed move
-        num_alt_DM = DM_available_move_actions_num - 1
-        
-        # Setting probability of unintended moves
-        prob_DM_part[~DM_moves_match & DM_pushes_match] = (1.0 - DM_execution_prob) / num_alt_DM
-        
-        # Other cases stay zero
-
-        # Initialize matrix for storing probabilities of action executing conditioned by intended action for Adv (intended x executed)
-        prob_Adv_part = np.zeros((self.num_Adv_actions, self.num_Adv_actions))
-        
-        # Creating a boolean matrix of intended x executed moves for probability assignment
-        Adv_moves_match = (Adv_moves[:, np.newaxis] == Adv_moves[np.newaxis, :])
-        
-        # Creating a boolean matrix of intended x executed pushes for probability assignment
-        Adv_pushes_match = (Adv_pushes[:, np.newaxis] == Adv_pushes[np.newaxis, :])
-        
-        # Setting probability for intended move AND push match executed move AND push
-        prob_Adv_part[Adv_moves_match & Adv_pushes_match] = Adv_execution_prob
-
-        # Setting probability for Intended push matches executed push, BUT intended move DOES NOT match executed move
-        num_alt_Adv = Adv_available_move_actions_num - 1
-        
-        # Setting probability of unintended moves
-        prob_Adv_part[~Adv_moves_match & Adv_pushes_match] = (1.0 - Adv_execution_prob) / num_alt_Adv
-        
-        # Other cases stay zero
-        
-        # Combine to get 4D prob_exec_tensor: P[idm, iadv, edm, eadv]
-        # containing joint probabilities of Adv and DM executing an action conditioned by intended action
-        prob_exec_tensor = prob_DM_part[:, np.newaxis, :, np.newaxis] * prob_Adv_part[np.newaxis, :, np.newaxis, :]
-        
-        return prob_exec_tensor
-    
-
-            
-    def _calculate_expected_future_value(self, actual_next_states_set, executed_action_outcomes):
-        """
-        Simulates all possible executed action pairs from the given state 'obs',
-        calculates the resulting next states and DM rewards, and computes
-        E[V(s',b')|s'] for each reachable s'.
-        """
-        
-        unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
-
-        ## Calculate E[V(s',b')|s'] only for unique_s_primes
-        s_prime_to_expected_V = {}
-
-        # Index V and Dir only for the relevant next states
-        V_relevant = self.V[unique_s_primes, :]    # Shape: (len(unique_s_primes), num_Adv_actions)
-        Dir_relevant = self.Dir[unique_s_primes, :] # Shape: (len(unique_s_primes), num_Adv_actions)
-
-        # Calculate normalization constant only for s which are relevant
-        dir_sum_relevant = np.sum(Dir_relevant, axis=1, keepdims=True)
-        
-        # Normalizing Dirichlet distribution only for relevant s
-        beliefs_Adv_action_relevant_s_prime = Dir_relevant / dir_sum_relevant
-        
-        # Calculating mean value of b's for each s. This part is not dependent on transition model and can be precalculated.
-        expected_V_values_for_unique_s_primes = np.sum(V_relevant * beliefs_Adv_action_relevant_s_prime, axis=1)
-        
-        # Save into dictionary for later lookup
-        for i, s_prime_idx in enumerate(unique_s_primes):
-            s_prime_to_expected_V[s_prime_idx] = expected_V_values_for_unique_s_primes[i]
-
-        # --- Prepare arrays of R(edm,eadv) and E[V(s'_from_edm,eadv)] ---
-        # These are rewards/values for *executed* actions.
-        DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
-        future_V_values_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions)) 
-
-        for DM_exec_idx in range(self.num_DM_actions):
-            for Adv_exec_idx in range(self.num_Adv_actions):
-                # Get next state and reward of DM for executed actions
-                s_prime, r_DM = executed_action_outcomes[(DM_exec_idx, Adv_exec_idx)]
-                DM_rewards_executed_array[DM_exec_idx, Adv_exec_idx] = r_DM
-                # Get E[V(s')|s'] from our map, default to 0 if s_prime somehow not found 
-                future_V_values_executed_array[DM_exec_idx, Adv_exec_idx] = s_prime_to_expected_V.get(s_prime, 0.0)
-        
-        self.DM_rewards_executed_array = DM_rewards_executed_array
-        self.future_V_values_executed_array = future_V_values_executed_array
-    
-    def _simulate_executed_outcomes(self, obs):
-        """
-        Simulates all possible executed action pairs from the given state 'obs'
-        and returns the resulting next states and DM rewards.
-        """
-    
-        # Run only if it was not already ran in this episode
-        if not self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag:
-            ## Determine reachable next states and their immediate rewards
-            self.reset_sim_env(obs)
-            executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
-            actual_next_states_set = set() # To store unique s_prime values
-
-            # Execute all actions with probab 1 to get reachable states and their rewards
-            for DM_exec_idx in range(self.num_DM_actions):
-                for Adv_exec_idx in range(self.num_Adv_actions):
-                    act_comb_executed = (DM_exec_idx, Adv_exec_idx)
-                    s_prime, rewards_vec, _ = self.env_snapshot.step(act_comb_executed)
-                    
-                    if self.player_id == 0:
-                        DM_reward_for_exec = rewards_vec[0]
-                    else: 
-                        DM_reward_for_exec = rewards_vec[1]
-                        
-                    executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
-                    actual_next_states_set.add(s_prime)
-                    
-                    self.reset_sim_env(obs) # Reset for the next simulation iteration
-            
-            self._calculate_expected_future_value(actual_next_states_set, executed_action_outcomes)
-            
-    def optim_act(self, obs): 
-            
-            # Perform sumproducts using np.einsum
-            
-            # Calculate expected reward r(s,a,b,s') with respect to p(s'|s,a,b)
-            expected_DM_rewards = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.DM_rewards_executed_array)
-
-            # Calculate the expectations of E[V(s',b')|s'] with respect to p(s'|s,a,b)
-            weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.future_V_values_executed_array)
-
-            # Final Action Selection
-            p_b_given_s_obs = self.Dir[obs] / np.sum(self.Dir[obs])
-            total_action_values = np.dot(expected_DM_rewards, p_b_given_s_obs) + self.gamma * np.dot(weighted_sum_future_V, p_b_given_s_obs)
-            
-            # Find indicies (actions) of all max values
-            max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
-
-            # Choose randomly among them
-            chosen_action = np.random.choice(max_indices)
-            
-            return chosen_action
-    
-    def act(self, obs, env):
-        "Epsilon greedy action selection strategy."
-        
-        self._simulate_executed_outcomes(obs)
-        # Set flag to True
-        self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag = True
-        
-        if np.random.rand() < self.epsilon:
-            return np.random.choice(self.action_space)
-        else:
-            return self.optim_act(obs)
-        
-    def update(self, obs, actions, rewards, new_obs):
-            # obs: current state where actions were taken
-            # actions: tuple [a_dm_actually_taken, b_opp_actually_taken]
-            # rewards, new_obs: not directly used for this type of V(s,b_opp) update,
-            #                   as it's a model-based VI-like update based on current V and model.
-
-            if self.player_id == 0:
-                b_opp_taken_in_obs = actions[1] # The opponent's action we observed in 'obs'
-            else: 
-                b_opp_taken_in_obs = actions[0] # The opponent's action we observed in 'obs'
-
-            # --- Calculate E[V(s',b_opp')|s'] ---
-            # This is the expected value of next states, considering opponent's policy in those next states.
-            # This code is largely the same as in act().
-            
-            # We already calculated this part in the act method which is ran 
-            
-            self._simulate_executed_outcomes(obs)
-
-            # Calculate Q(obs, a_dm_intended, b_opp_taken_in_obs) for ALL a_dm_intended ---
-            # We need to find the best DM response 'a_dm_intended' if opponent plays 'b_opp_taken_in_obs'.
-            
-            # prob_exec_tensor_for_fixed_b[idm, edm, eadv] = P(edm,eadv | idm, iadv=b_opp_taken_in_obs)
-            prob_exec_tensor_for_fixed_b = self.prob_exec_tensor[:, b_opp_taken_in_obs, :, :]
-            
-            # E[Reward | obs, idm, b_opp_taken_in_obs] = sum_{edm,eadv} P(edm,eadv | idm, b_opp_taken_in_obs) * R(edm,eadv)
-            # Output shape: (num_DM_actions_intended,)
-            expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, self.DM_rewards_executed_array)
-            
-            # E[Future_V | obs, idm, b_opp_taken_in_obs] = sum_{edm,eadv} P(edm,eadv | idm, b_opp_taken_in_obs) * E[V(s'_from_edm,eadv)]
-            # Output shape: (num_DM_actions_intended,)
-            expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, self.future_V_values_executed_array)
-            
-            # Q_values[idm] = Q(obs, idm, b_opp_taken_in_obs)
-            Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
-            
-            # Update V(obs, b_opp_taken_in_obs) with the max Q-value (DM plays optimally against b_opp_taken_in_obs)
-            self.V[obs, b_opp_taken_in_obs] = np.max(Q_values_for_dm_intentions)
-
-            # Update the Dirichlet model for the opponent's observed action
-            self.Dir[obs, b_opp_taken_in_obs] += 1         
-            
-            # Set flag for simulation of outcomes to false for next episode 
-            self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag = False      
-
-
-
 class Level1DPAgent_NonStationary(Agent):
     """
     A value iteration agent that treats the other player as a level 0 agent.
@@ -1380,361 +1031,490 @@ class Level1DPAgent_Dynamic(Agent):
         # Distribute the credit: increment the count for each possible executed action which lead to s'.
         # This assumes each is equally likely, which is a simplifying assumption.
         for edm, eadv in possible_executed_actions:
-            self.transition_model_weights[idm, iadv, obs, edm, eadv] += 1
+            self.transition_model_weights[idm, iadv, obs, edm, eadv] += 1 
+        
 
+# In agent_DP.py
 
-class Level2DPAgent_Stationary(Agent):
+class LevelKDPAgent_Stationary(Agent):
     """
-    A value iteration agent that treats the other player as a level 1 agent.
-    She learns from other's actions, estimating their value function.
-    She represents value function in a tabular form, i.e., using a matrix V.
-    Stationary in this case means that the agent has full information about transition distribution and precalculates it befefore running act() and update()
+    A template for a level-k value iteration agent.
+    - k=1: A level-1 agent that models its opponent as a level-0 (zero-intelligence) agent 
+           using a Dirichlet distribution to learn their action probabilities. This is the base case.
+    - k>1: A level-k agent that models its opponent as a level-(k-1) agent. It recursively
+           builds a model of the opponent to predict their actions.
+
+    This agent assumes a stationary environment with a known transition model.
     """
 
-    def __init__(self, action_space, enemy_action_space, n_states, epsilon, gamma, player_id, env):
+    def __init__(self, k, action_space, enemy_action_space, n_states, epsilon, gamma, player_id, env):
+        if k < 1:
+            raise ValueError("Level k must be a positive integer.")
+            
         Agent.__init__(self, action_space)
 
+        # Core agent parameters
+        self.k = k
         self.n_states = n_states
-        self.epsilonA = epsilon
-        self.epsilonB = epsilon
-        self.gammaA = gamma
-        self.gammaB = gamma
+        self.epsilon = epsilon
+        self.gamma = gamma
         self.player_id = player_id
-        
-        # Flag to ensure simulation and expected value calculation runs only once per step
-        self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag = False
-        
         self.enemy_action_space = enemy_action_space
 
-        # This is the value function V(s,a)
+        # Value function V(s, b_opp), where b_opp is the opponent's action
         self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
         
-        # Initializing adversary agent
-        self.enemy = Level1DPAgent_Stationary(action_space=self.enemy_action_space,
-                   enemy_action_space=self.action_space,
-                   n_states=self.n_states,
-                   epsilon=self.epsilonB,
-                   gamma=self.gammaB,
-                   player_id=1-self.player_id, # Initialize enemy to opposite player_id than this level
-                   env=env)    
-    
-        # Initialize an empty environment for simulation of steps 
-        #* Warning: Do not copy env to many times -> extreme memory and computational overhead (garbage collection)
+        # --- Common Initialization for all levels ---
+        
+        # Flag to prevent re-simulation within a single step
+        self._simulate_flag = False
+        
+        # Simulation environment for lookaheads
         self.env_snapshot = copy.deepcopy(env)
         self.env_snapshot.blue_player_execution_prob = 1
         self.env_snapshot.red_player_execution_prob = 1
         
-        # Calculate P(edm,eadv | idm,iadv) - the 4D execution probability tensor
-        
+        # Determine action spaces and details based on player_id
         if self.player_id == 0:
-            DM_action_details = self.env_snapshot.combined_actions_blue
-            Adv_action_details = self.env_snapshot.combined_actions_red
-            
-            DM_available_move_actions_num = len(env.available_move_actions_DM)
-            Adv_available_move_actions_num = len(env.available_move_actions_Adv)
-            
-            # Saving number of DM and Adv actions
-            self.num_DM_actions = len(self.env_snapshot.combined_actions_blue)
-            self.num_Adv_actions = len(self.env_snapshot.combined_actions_red)
-            
-            DM_execution_prob = env.blue_player_execution_prob
-            Adv_execution_prob = env.red_player_execution_prob
-            
+            self.DM_action_details = self.env_snapshot.combined_actions_blue
+            self.Adv_action_details = self.env_snapshot.combined_actions_red
+            self.num_DM_actions = len(env.combined_actions_blue)
+            self.num_Adv_actions = len(env.combined_actions_red)
+            self.DM_available_move_actions_num = len(env.available_move_actions_DM)
+            self.Adv_available_move_actions_num = len(env.available_move_actions_Adv)
         else: 
-            DM_action_details = self.env_snapshot.combined_actions_red
-            Adv_action_details = self.env_snapshot.combined_actions_blue
-            
-            DM_available_move_actions_num = len(env.available_move_actions_Adv)
-            Adv_available_move_actions_num = len(env.available_move_actions_DM)
-            
-            # Saving number of DM and Adv actions
-            self.num_DM_actions = len(self.env_snapshot.combined_actions_red)
-            self.num_Adv_actions = len(self.env_snapshot.combined_actions_blue)
-            
-            DM_execution_prob = env.red_player_execution_prob
-            Adv_execution_prob = env.blue_player_execution_prob
-        
-        # Initialize array for executed action reward (executed action == moving to state s')
+            self.DM_action_details = self.env_snapshot.combined_actions_red
+            self.Adv_action_details = self.env_snapshot.combined_actions_blue
+            self.num_DM_actions = len(env.combined_actions_red)
+            self.num_Adv_actions = len(env.combined_actions_blue)
+            self.DM_available_move_actions_num = len(env.available_move_actions_Adv)
+            self.Adv_available_move_actions_num = len(env.available_move_actions_DM)
+
+        # Initialize arrays for storing simulation results
         self.DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
-        # Initialize array for calculation of E[V(s',b')|s']
         self.future_V_values_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
+
+        # Pre-calculate the state transition probabilities (for stationary agent)
+        self.prob_exec_tensor = self._calculate_execution_probabilities(env)
         
-        # Pre-calculate the state transition probabilities based on execution probabilities
-        self.prob_exec_tensor = self._calculate_execution_probabilities(DM_action_details, Adv_action_details,
-                                         DM_execution_prob, Adv_execution_prob,
-                                         DM_available_move_actions_num, Adv_available_move_actions_num)
+        # --- Level-Specific Initialization ---
         
-    def reset_sim_env(self, obs):
+        self.enemy = None
+        self.Dir = None
+        
+        if self.k == 1:
+            # BASE CASE: Level-1 agent models opponent with a Dirichlet distribution
+            self.Dir = np.ones((self.n_states, len(self.enemy_action_space)))
+        
+        elif self.k > 1:
+            # RECURSIVE STEP: Level-k agent models opponent as a Level-(k-1) agent
+            self.enemy = LevelKDPAgent_Stationary(
+                k=self.k - 1, # The recursive call
+                action_space=self.enemy_action_space,
+                enemy_action_space=self.action_space,
+                n_states=self.n_states,
+                epsilon=self.epsilon, # Using same parameters for the modeled enemy
+                gamma=self.gamma,
+                player_id=1 - self.player_id, # Opponent has the opposite player_id
+                env=env
+            )
+
+    def _get_opponent_policy(self, obs):
         """
-        Resets the simulated environment to the state represented by 'obs'.
-        - Player and coin positions and collection status are restored from 'obs'.
-        - Step counter is reset (as per self.env_snapshot.reset()).
+        Abstracts the way the opponent's policy is estimated based on the agent's level k.
+        Returns a probability distribution over the opponent's actions in state 'obs'.
         """
-        # Reset the environment to a default initial state first
-        self.env_snapshot.reset()
-
-        # Radix decoding of the state ID 'obs'
-        base_pos = self.env_snapshot.N * self.env_snapshot.N
-        base_coll = 2  # 0 or 1 for each coin
-
-        # Decode collected coin flags (in reverse order of encoding)
-        self.env_snapshot.red_collected_coin2 = bool(obs % base_coll)
-        obs //= base_coll
-
-        self.env_snapshot.red_collected_coin1 = bool(obs % base_coll)
-        obs //= base_coll
-
-        self.env_snapshot.blue_collected_coin2 = bool(obs % base_coll)
-        obs //= base_coll
-
-        self.env_snapshot.blue_collected_coin1 = bool(obs % base_coll)
-        obs //= base_coll
-
-        # Decode player positions
-        p2_flat = obs % base_pos  # Red player's flattened position
-        obs //= base_pos
-        
-        p1_flat = obs  # Blue player's flattened position (or simply obs)
-
-        # Convert flattened positions back to 2D coordinates
-        # p_flat = row + N * col
-        blue_player_col = p1_flat // self.env_snapshot.N
-        blue_player_row = p1_flat % self.env_snapshot.N
-        
-        # Setting blue player to coordinates extracted from state obs
-        self.env_snapshot.blue_player = np.array([blue_player_row, blue_player_col])
-
-        red_player_col = p2_flat // self.env_snapshot.N
-        red_player_row = p2_flat % self.env_snapshot.N
-        
-        # Setting red player to coordinates extracted from state obs
-        self.env_snapshot.red_player = np.array([red_player_row, red_player_col])
-        
-        # Set coin availability based on decoded collection status
-        self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
-        self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)    
-    
-    def _calculate_execution_probabilities(self,DM_action_details, Adv_action_details,
-                                         DM_execution_prob, Adv_execution_prob,
-                                         DM_available_move_actions_num, Adv_available_move_actions_num):
-        """
-        Pre-calculates the 4D tensor of execution probabilities:
-        P[idm, iadv, edm, eadv] = P(edm, eadv | idm, iadv)
-        where i = intended, e = executed, dm = decision maker, adv = adversary.
-        """
-        
-        DM_moves = DM_action_details[:, 0]
-        DM_pushes = DM_action_details[:, 1]
-        Adv_moves = Adv_action_details[:, 0]
-        Adv_pushes = Adv_action_details[:, 1]
-        
-        # Initialize matrix for storing probabilities of action executing conditioned by intended action for DM (intended x executed)
-        prob_DM_part = np.zeros((self.num_DM_actions, self.num_DM_actions)) # P(edm|idm)
-        
-        # Creating a boolean matrix of intended x executed moves for probability assignment
-        DM_moves_match = (DM_moves[:, np.newaxis] == DM_moves[np.newaxis, :])
-        
-        # Creating a boolean matrix of intended x executed pushes for probability assignment
-        DM_pushes_match = (DM_pushes[:, np.newaxis] == DM_pushes[np.newaxis, :])
-        
-        # Setting probability for intended move AND push match executed move AND push
-        prob_DM_part[DM_moves_match & DM_pushes_match] = DM_execution_prob
-
-        # Setting probability for Intended push matches executed push, BUT intended move DOES NOT match executed move
-        num_alt_DM = DM_available_move_actions_num - 1
-        
-        # Setting probability of unintended moves
-        prob_DM_part[~DM_moves_match & DM_pushes_match] = (1.0 - DM_execution_prob) / num_alt_DM
-        
-        # Other cases stay zero
-
-        # Initialize matrix for storing probabilities of action executing conditioned by intended action for Adv (intended x executed)
-        prob_Adv_part = np.zeros((self.num_Adv_actions, self.num_Adv_actions))
-        
-        # Creating a boolean matrix of intended x executed moves for probability assignment
-        Adv_moves_match = (Adv_moves[:, np.newaxis] == Adv_moves[np.newaxis, :])
-        
-        # Creating a boolean matrix of intended x executed pushes for probability assignment
-        Adv_pushes_match = (Adv_pushes[:, np.newaxis] == Adv_pushes[np.newaxis, :])
-        
-        # Setting probability for intended move AND push match executed move AND push
-        prob_Adv_part[Adv_moves_match & Adv_pushes_match] = Adv_execution_prob
-
-        # Setting probability for Intended push matches executed push, BUT intended move DOES NOT match executed move
-        num_alt_Adv = Adv_available_move_actions_num - 1
-        
-        # Setting probability of unintended moves
-        prob_Adv_part[~Adv_moves_match & Adv_pushes_match] = (1.0 - Adv_execution_prob) / num_alt_Adv
-        
-        # Other cases stay zero
-        
-        # Combine to get 4D prob_exec_tensor: P[idm, iadv, edm, eadv]
-        # containing joint probabilities of Adv and DM executing an action conditioned by intended action
-        prob_exec_tensor = prob_DM_part[:, np.newaxis, :, np.newaxis] * prob_Adv_part[np.newaxis, :, np.newaxis, :]
-        
-        return prob_exec_tensor
-
-    def _calculate_expected_future_value(self, actual_next_states_set, executed_action_outcomes):
-            unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
-
-            ## Calculate E[V(s',b')|s'] only for unique_s_primes
-            s_prime_to_expected_V = {}
-
-            # Index V and Dir only for the relevant next states
-            V_relevant = self.V[unique_s_primes, :]    # Shape: (len(unique_s_primes), num_Adv_actions)
-            
-            # Initialize an array to store epsilon-greedy policies for each unique_s_prime
-            eps_greed_enemy_policies_for_s_primes = np.zeros((len(unique_s_primes), self.num_Adv_actions))
-            
-            # Simulating epsilon greedy strategies for each reacheble s'
-            for i, s_prime_idx in enumerate(unique_s_primes):
-                enemy_opt_act = self.enemy.optim_act(s_prime_idx)
-                
-                prob_non_optimal = self.epsilonB / (self.num_Adv_actions - 1)
-                eps_greed_enemy_policies_for_s_primes[i, :] = prob_non_optimal
-                eps_greed_enemy_policies_for_s_primes[i, enemy_opt_act] = 1.0 - self.epsilonB
-            
-            # Calculating mean value of b's for each s. This part is not dependent on transition model and can be precalculated.
-            expected_V_values_for_unique_s_primes = np.sum(V_relevant * eps_greed_enemy_policies_for_s_primes, axis=1)
-            
-            # Save into dictionary for later lookup
-            for i, s_prime_idx in enumerate(unique_s_primes):
-                s_prime_to_expected_V[s_prime_idx] = expected_V_values_for_unique_s_primes[i]
-
-            # --- Prepare arrays of R(edm,eadv) and E[V(s'_from_edm,eadv)] ---
-            # These are rewards/values for *executed* actions.
-            DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
-            future_V_values_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions)) 
-
-            for DM_exec_idx in range(self.num_DM_actions):
-                for Adv_exec_idx in range(self.num_Adv_actions):
-                    # Get next state and reward of DM for executed actions
-                    s_prime, r_DM = executed_action_outcomes[(DM_exec_idx, Adv_exec_idx)]
-                    DM_rewards_executed_array[DM_exec_idx, Adv_exec_idx] = r_DM
-                    # Get E[V(s')|s'] from our map, default to 0 if s_prime somehow not found 
-                    future_V_values_executed_array[DM_exec_idx, Adv_exec_idx] = s_prime_to_expected_V.get(s_prime, 0.0)
-            
-            self.DM_rewards_executed_array = DM_rewards_executed_array
-            self.future_V_values_executed_array = future_V_values_executed_array
-        
-    def _simulate_executed_outcomes(self, obs):
-        """
-        Simulates all possible executed action pairs from the given state 'obs'
-        and returns the resulting next states and DM rewards.
-        """
-    
-        # Run only if it was not already ran in this episode
-        if not self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag:
-            ## Determine reachable next states and their immediate rewards
-            self.reset_sim_env(obs)
-            executed_action_outcomes = {}  # (exec_dm_idx, exec_adv_idx) -> (s_prime, r_DM)
-            actual_next_states_set = set() # To store unique s_prime values
-
-            # Execute all actions with probab 1 to get reachable states and their rewards
-            for DM_exec_idx in range(self.num_DM_actions):
-                for Adv_exec_idx in range(self.num_Adv_actions):
-                    act_comb_executed = (DM_exec_idx, Adv_exec_idx)
-                    s_prime, rewards_vec, _ = self.env_snapshot.step(act_comb_executed)
-                    
-                    if self.player_id == 0:
-                        DM_reward_for_exec = rewards_vec[0]
-                    else: 
-                        DM_reward_for_exec = rewards_vec[1]
-                        
-                    executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
-                    actual_next_states_set.add(s_prime)
-                    
-                    self.reset_sim_env(obs) # Reset for the next simulation iteration
-            
-            self._calculate_expected_future_value(actual_next_states_set, executed_action_outcomes)
-
-
-    def optim_act(self, obs):
-
-            # Perform sumproducts using np.einsum
-            
-            # Calculate expected reward r(s,a,b,s') with respect to p(s'|s,a,b)
-            expected_DM_rewards = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.DM_rewards_executed_array)
-
-            # Calculate the expectations of E[V(s',b')|s'] with respect to p(s'|s,a,b)
-            weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.future_V_values_executed_array)
-
-            # Final Action Selection
-            
-            eps_greed_enemy_policy_for_obs = np.zeros(self.num_Adv_actions)
-            
-            # Calculate estimated adversary epsilon greedy strategy in state obs
-            #!!! Can be calculated only once at this stage, consider moving into separate method
+        if self.k == 1:
+            # Level-1 models opponent policy from Dirichlet counts
+            dir_sum = np.sum(self.Dir[obs])
+            if dir_sum == 0:
+                # Handle case where state has not been visited to avoid division by zero
+                return np.ones(self.num_Adv_actions) / self.num_Adv_actions
+            return self.Dir[obs] / dir_sum
+        else: # k > 1
+            # Level-k models opponent as a rational (epsilon-greedy) agent
+            enemy_policy = np.zeros(self.num_Adv_actions)
             enemy_opt_act = self.enemy.optim_act(obs)
-                
-            prob_non_optimal = self.epsilonB / (self.num_Adv_actions - 1)
-            eps_greed_enemy_policy_for_obs[:] = prob_non_optimal
-            eps_greed_enemy_policy_for_obs[enemy_opt_act] = 1.0 - self.epsilonB
-                 
-            total_action_values = np.dot(expected_DM_rewards, eps_greed_enemy_policy_for_obs) + self.gammaA * np.dot(weighted_sum_future_V, eps_greed_enemy_policy_for_obs)
             
-            # Find indicies (actions) of all max values
-            max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
+            # Handle the case where there is only one action
+            if self.num_Adv_actions > 1:
+                prob_non_optimal = self.epsilon / (self.num_Adv_actions - 1)
+                enemy_policy[:] = prob_non_optimal
+                enemy_policy[enemy_opt_act] = 1.0 - self.epsilon
+            else:
+                enemy_policy[enemy_opt_act] = 1.0
 
-            # Choose randomly among them
-            chosen_action = np.random.choice(max_indices)
+            return enemy_policy
             
-            return chosen_action
-    
-    def act(self, obs, env):
-        "Epsilon greedy action selection strategy."
-
-        self._simulate_executed_outcomes(obs)
-        # Set flag to True
-        self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag = True
+    def optim_act(self, obs):
+        """Selects the optimal action based on the model."""
+        # Expected immediate rewards for each (idm, iadv) pair
+        expected_DM_rewards = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.DM_rewards_executed_array)
+        # Expected future values for each (idm, iadv) pair
+        weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.future_V_values_executed_array)
         
-        if np.random.rand() < self.epsilonA:
+        # Get opponent's predicted policy for the current state
+        opponent_policy_in_obs = self._get_opponent_policy(obs)
+
+        # Calculate total value for each of our actions, marginalized over opponent's policy
+        total_action_values = np.dot(expected_DM_rewards, opponent_policy_in_obs) + \
+                              self.gamma * np.dot(weighted_sum_future_V, opponent_policy_in_obs)
+        
+        # Choose best action (breaking ties randomly)
+        max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
+        return np.random.choice(max_indices)
+
+    def act(self, obs, env):
+        """Epsilon-greedy action selection."""
+        # Ensure simulations are run for the current state
+        self._simulate_executed_outcomes(obs)
+        self._simulate_flag = True
+        
+        if np.random.rand() < self.epsilon:
             return np.random.choice(self.action_space)
         else:
             return self.optim_act(obs)
- 
 
     def update(self, obs, actions, rewards, new_obs):
-            # obs: current state where actions were taken
-            # actions: tuple [a_dm_actually_taken, b_opp_actually_taken]
-            # rewards, new_obs: not directly used for this type of V(s,b_opp) update,
-            #                   as it's a model-based VI-like update based on current V and model.
+        """Updates the agent's value function and internal models."""
+        # Determine opponent's observed action
+        b_opp_taken_in_obs = actions[1] if self.player_id == 0 else actions[0]
 
+        # Update opponent model (recursively for k>1, or Dirichlet for k=1)
+        if self.k > 1:
             self.enemy.update(obs, actions, rewards, new_obs)
+        else: # k == 1
+            self.Dir[obs, b_opp_taken_in_obs] += 1
+            
+        # Ensure simulations are run for the current state before updating V
+        self._simulate_executed_outcomes(obs)
 
-            if self.player_id == 0:
-                b_opp_taken_in_obs = actions[1] # The opponent's action we observed in 'obs'
-            else: 
-                b_opp_taken_in_obs = actions[0] # The opponent's action we observed in 'obs'
-            
-            # --- Calculate E[V(s',b_opp')|s'] ---
-            # This is the expected value of next states, considering opponent's policy in those next states.
-            # This code is largely the same as in act().
-
-            self._simulate_executed_outcomes(obs)
-
-            # Calculate Q(obs, a_dm_intended, b_opp_taken_in_obs) for ALL a_dm_intended ---
-            # We need to find the best DM response 'a_dm_intended' if opponent plays 'b_opp_taken_in_obs'.
-            
-            # prob_exec_tensor_for_fixed_b[idm, edm, eadv] = P(edm,eadv | idm, iadv=b_opp_taken_in_obs)
-            prob_exec_tensor_for_fixed_b = self.prob_exec_tensor[:, b_opp_taken_in_obs, :, :]
-            
-            # E[Reward | obs, idm, b_opp_taken_in_obs] = sum_{edm,eadv} P(edm,eadv | idm, b_opp_taken_in_obs) * R(edm,eadv)
-            # Output shape: (num_DM_actions_intended,)
-            expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, self.DM_rewards_executed_array)
-            
-            # E[Future_V | obs, idm, b_opp_taken_in_obs] = sum_{edm,eadv} P(edm,eadv | idm, b_opp_taken_in_obs) * E[V(s'_from_edm,eadv)]
-            # Output shape: (num_DM_actions_intended,)
-            expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_for_fixed_b, self.future_V_values_executed_array)
-                 
-            # Q_values[idm] = Q(obs, idm, b_opp_taken_in_obs)
-            Q_values_for_dm_intentions = expected_rewards_all_idm + self.gammaA * expected_future_V_all_idm
-            
-            # Update V(obs, b_opp_taken_in_obs) with the max Q-value (DM plays optimally against b_opp_taken_in_obs)
-            self.V[obs, b_opp_taken_in_obs] = np.max(Q_values_for_dm_intentions)
-            
-            # Set flag for simulation of outcomes to false for next episode 
-            self._simulate_executed_outcomes_and_calculate_expected_value_in_s_prime_flag = False      
+        # --- Update V(obs, b_opp) ---
+        prob_exec_tensor_fixed_b = self.prob_exec_tensor[:, b_opp_taken_in_obs, :, :]
+        expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, self.DM_rewards_executed_array)
+        expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, self.future_V_values_executed_array)
+        Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
+        self.V[obs, b_opp_taken_in_obs] = np.max(Q_values_for_dm_intentions)
         
+        # Reset simulation flag for the next step
+        self._simulate_flag = False
 
+    def _simulate_executed_outcomes(self, obs):
+        """Simulates all outcomes from 'obs' to get rewards and next states."""
+        if self._simulate_flag:
+            return
+
+        self.reset_sim_env(obs)
+        executed_action_outcomes = {}
+        actual_next_states_set = set()
+
+        for DM_exec_idx in range(self.num_DM_actions):
+            for Adv_exec_idx in range(self.num_Adv_actions):
+                act_comb_executed = (DM_exec_idx, Adv_exec_idx)
+                s_prime, rewards_vec, _ = self.env_snapshot.step(act_comb_executed)
+                
+                DM_reward_for_exec = rewards_vec[self.player_id]
+                executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
+                actual_next_states_set.add(s_prime)
+                self.reset_sim_env(obs)
+
+        self._calculate_expected_future_value(actual_next_states_set, executed_action_outcomes)
+
+    def _calculate_expected_future_value(self, actual_next_states_set, executed_action_outcomes):
+        """Calculates E[V(s', b')] for each possible next state s'."""
+        unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
+        s_prime_to_expected_V = {}
+
+        for s_prime_idx in unique_s_primes:
+            V_s_prime = self.V[s_prime_idx, :]
+            opponent_policy_in_s_prime = self._get_opponent_policy(s_prime_idx)
+            s_prime_to_expected_V[s_prime_idx] = np.dot(V_s_prime, opponent_policy_in_s_prime)
+        
+        for DM_exec_idx in range(self.num_DM_actions):
+            for Adv_exec_idx in range(self.num_Adv_actions):
+                s_prime, r_DM = executed_action_outcomes[(DM_exec_idx, Adv_exec_idx)]
+                self.DM_rewards_executed_array[DM_exec_idx, Adv_exec_idx] = r_DM
+                self.future_V_values_executed_array[DM_exec_idx, Adv_exec_idx] = s_prime_to_expected_V.get(s_prime, 0.0)
+
+    def reset_sim_env(self, obs):
+        self.env_snapshot.reset()
+        base_pos = self.env_snapshot.N * self.env_snapshot.N
+        base_coll = 2
+        self.env_snapshot.red_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+        self.env_snapshot.red_collected_coin1 = bool(obs % base_coll)
+        obs //= base_coll
+        self.env_snapshot.blue_collected_coin2 = bool(obs % base_coll)
+        obs //= base_coll
+        self.env_snapshot.blue_collected_coin1 = bool(obs % base_coll)
+        obs //= base_coll
+        p2_flat = obs % base_pos
+        obs //= base_pos
+        p1_flat = obs
+        blue_player_col = p1_flat // self.env_snapshot.N
+        blue_player_row = p1_flat % self.env_snapshot.N
+        self.env_snapshot.blue_player = np.array([blue_player_row, blue_player_col])
+        red_player_col = p2_flat // self.env_snapshot.N
+        red_player_row = p2_flat % self.env_snapshot.N
+        self.env_snapshot.red_player = np.array([red_player_row, red_player_col])
+        self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
+        self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
+
+    def _calculate_execution_probabilities(self, env):
+        # Determine current execution probabilities from the passed environment
+        if self.player_id == 0:
+            DM_execution_prob = env.blue_player_execution_prob
+            Adv_execution_prob = env.red_player_execution_prob
+        else:
+            DM_execution_prob = env.red_player_execution_prob
+            Adv_execution_prob = env.blue_player_execution_prob
+
+        DM_moves = self.DM_action_details[:, 0]
+        DM_pushes = self.DM_action_details[:, 1]
+        Adv_moves = self.Adv_action_details[:, 0]
+        Adv_pushes = self.Adv_action_details[:, 1]
+        
+        prob_DM_part = np.zeros((self.num_DM_actions, self.num_DM_actions))
+        DM_moves_match = (DM_moves[:, np.newaxis] == DM_moves[np.newaxis, :])
+        DM_pushes_match = (DM_pushes[:, np.newaxis] == DM_pushes[np.newaxis, :])
+        prob_DM_part[DM_moves_match & DM_pushes_match] = DM_execution_prob
+        
+        num_alt_DM = self.DM_available_move_actions_num - 1
+        if num_alt_DM > 0:
+            prob_DM_part[~DM_moves_match & DM_pushes_match] = (1.0 - DM_execution_prob) / num_alt_DM
+        
+        prob_Adv_part = np.zeros((self.num_Adv_actions, self.num_Adv_actions))
+        Adv_moves_match = (Adv_moves[:, np.newaxis] == Adv_moves[np.newaxis, :])
+        Adv_pushes_match = (Adv_pushes[:, np.newaxis] == Adv_pushes[np.newaxis, :])
+        prob_Adv_part[Adv_moves_match & Adv_pushes_match] = Adv_execution_prob
+        
+        num_alt_Adv = self.Adv_available_move_actions_num - 1
+        if num_alt_Adv > 0:
+            prob_Adv_part[~Adv_moves_match & Adv_pushes_match] = (1.0 - Adv_execution_prob) / num_alt_Adv
+        
+        prob_exec_tensor = prob_DM_part[:, np.newaxis, :, np.newaxis] * prob_Adv_part[np.newaxis, :, np.newaxis, :]
+        return prob_exec_tensor
+    
+
+class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
+    """
+    A non-stationary version of the level-k DP agent.
+    This agent assumes the transition probabilities (player execution probabilities)
+    can change over time and recalculates them at each step.
+
+    Inherits from LevelKDPAgent_Stationary and overrides methods to handle
+    non-stationarity.
+    """
+
+    def __init__(self, k, action_space, enemy_action_space, n_states, epsilon, gamma, player_id, env):
+        # Call the parent constructor, which will set up most of the attributes.
+        # It will also calculate an initial prob_exec_tensor, which we will override in act().
+        super().__init__(k, action_space, enemy_action_space, n_states, epsilon, gamma, player_id, env)
+
+        # --- Override the Opponent Model for k > 1 ---
+        # The parent creates a Stationary opponent. We need to replace it with a NonStationary one.
+        if self.k > 1:
+            self.enemy = LevelKDPAgent_NonStationary( # Use the NonStationary class recursively
+                k=self.k - 1,
+                action_space=self.enemy_action_space,
+                enemy_action_space=self.action_space,
+                n_states=self.n_states,
+                epsilon=self.epsilon,
+                gamma=self.gamma,
+                player_id=1 - self.player_id,
+                env=env
+            )
+    
+    def _recalculate_transition_model(self, env):
+        """
+        Recursively recalculates the transition probability tensor for this agent
+        and all agents in its opponent model hierarchy.
+        """
+        # Recalculate for the current agent
+        self.prob_exec_tensor = self._calculate_execution_probabilities(env)
+
+        # Recursively call for the opponent model if it exists
+        if self.k > 1 and self.enemy:
+            self.enemy._recalculate_transition_model(env)
+
+    def act(self, obs, env):
+        """
+        Epsilon-greedy action selection for the non-stationary case.
+        First, it updates the transition model based on the current environment state.
+        """
+        # Recalculate the transition probabilities for this agent and its opponent model
+        self._recalculate_transition_model(env)
+        
+        # Now, call the parent's act method, which will use the updated prob_exec_tensor
+        return super().act(obs, env)
+    
+
+# In agent_DP.py
+
+class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
+    """
+    A dynamic version of the level-k DP agent.
+    This agent learns the transition model P(s' | s, a, b) online using a
+    Dirichlet distribution over possible outcomes.
+
+    Inherits from LevelKDPAgent_Stationary and overrides methods related to
+    the transition model.
+    """
+
+    def __init__(self, k, action_space, enemy_action_space, n_states, epsilon, gamma, player_id, env):
+        # Call the parent constructor to set up V, env_snapshot, action spaces, etc.
+        # It will also create a base Level-K Stationary opponent model.
+        super().__init__(k, action_space, enemy_action_space, n_states, epsilon, gamma, player_id, env)
+
+        # --- Dynamic-Specific Overrides and Additions ---
+
+        # The dynamic agent does not have a single, pre-calculated tensor.
+        # This will be calculated on-the-fly for each state.
+        self.prob_exec_tensor = None 
+
+        # 5D array for Dirichlet counts: P(idm, iadv, s_start, edm, eadv)
+        # We learn a separate transition model for each starting state 's'.
+        self.transition_model_weights = np.ones(
+            (self.num_DM_actions, self.num_Adv_actions, self.n_states, self.num_DM_actions, self.num_Adv_actions)
+        )
+
+        # Pre-compute the lookup table for which executed actions lead from s to s'.
+        # This is a one-time, expensive operation.
+        self.s_prime_to_exec_actions = self._create_s_prime_lookup_table()
+
+        # Override the opponent model to be dynamic.
+        if self.k > 1:
+            self.enemy = LevelKDPAgent_Dynamic( # Recursive call to the Dynamic class
+                k=self.k - 1,
+                action_space=self.enemy_action_space,
+                enemy_action_space=self.action_space,
+                n_states=self.n_states,
+                epsilon=self.epsilon,
+                gamma=self.gamma,
+                player_id=1 - self.player_id,
+                env=env
+            )
+
+    def _get_probabilities_for_state(self, obs):
+        """
+        Calculates P(edm, eadv | s=obs, idm, iadv) for a single given state
+        based on the learned transition_model_weights.
+        """
+        weights_for_obs = self.transition_model_weights[:, :, obs, :, :]
+        total_counts = np.sum(weights_for_obs, axis=(2, 3), keepdims=True)
+        
+        # Use np.divide to handle states that have never been visited (total_counts=0)
+        prob_tensor_for_obs = np.divide(
+            weights_for_obs, total_counts,
+            out=np.zeros_like(weights_for_obs),
+            where=total_counts != 0
+        )
+        return prob_tensor_for_obs
+    
+    def act(self, obs, env):
+        """
+        Epsilon-greedy action selection for the dynamic case.
+        First, it updates the transition model for the current state.
+        """
+        # Get the learned transition probabilities for the current state 'obs'
+        self.prob_exec_tensor = self._get_probabilities_for_state(obs)
+        
+        # Now, call the parent's act method, which will use the updated tensor
+        return super().act(obs, env)
+    
+    def optim_act(self, obs):
+        """
+        Selects the optimal action for a dynamic agent.
+        This method is self-sufficient and does not rely on `act` being called first.
+        """
+        # Calculate the state transition in optim_act
+        # Note: This is primaraly so that the hierarchical k-level structure works.
+        current_prob_tensor = self._get_probabilities_for_state(obs)
+
+        # Now, proceed with the original logic from the stationary agent,
+        # but using the just-calculated tensor.
+        expected_DM_rewards = np.einsum('ijkl,kl->ij', current_prob_tensor, self.DM_rewards_executed_array)
+        weighted_sum_future_V = np.einsum('ijkl,kl->ij', current_prob_tensor, self.future_V_values_executed_array)
+        
+        opponent_policy_in_obs = self._get_opponent_policy(obs)
+
+        total_action_values = np.dot(expected_DM_rewards, opponent_policy_in_obs) + \
+                              self.gamma * np.dot(weighted_sum_future_V, opponent_policy_in_obs)
+        
+        max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
+        return np.random.choice(max_indices)
+
+
+    def update(self, obs, actions, rewards, new_obs):
+        """
+        Updates the value function and the learned transition model.
+        """
+        # First, update the transition model with the new observation.
+        # Note: This must be done BEFORE the value function is updated.
+        idm, iadv = actions
+        
+        # Look up all possible executed actions that could explain the transition from obs to new_obs
+        possible_executed_actions = self.s_prime_to_exec_actions.get(obs, {}).get(new_obs, [])
+
+        # Update the Dirichlet counts for each possible executed action pair
+        for edm, eadv in possible_executed_actions:
+            self.transition_model_weights[idm, iadv, obs, edm, eadv] += 1
+        
+        # After updating the model, get the fresh probability tensor for this state.
+        # Note: This is needed for the V(s,b) update part.
+        self.prob_exec_tensor = self._get_probabilities_for_state(obs)
+        
+        # Call the parent's update method to handle the Bellman update for V(s,b)
+        # and the recursive update of the opponent model.
+        super().update(obs, actions, rewards, new_obs)
+    
+    def _create_s_prime_lookup_table(self):
+        """
+        Pre-computes a lookup table that maps (s, s') -> list of (edm, eadv).
+        This tells us which executed actions could lead from state s to s'.
+        This is computationally expensive and should only be run once.
+        """
+        print("Pre-computing the s' to executed actions lookup table. This may take a while...")
+        
+        lookup_table = {}
+        for s in range(self.n_states):
+            lookup_table[s] = {}
+            try:
+                self.reset_sim_env(s)
+            except (IndexError, ValueError):
+                continue
+
+            # Loop through every possible EXECUTED action for the Decision Maker (DM)
+            for edm in range(self.num_DM_actions):
+                
+                # Loop through every possible EXECUTED action for the Adversary (Adv)
+                for eadv in range(self.num_Adv_actions):
+
+                    # By nesting these loops, we are systematically checking every single
+                    # combination of executed actions that could happen in the game.
+                    
+                    # Save the starting state before we modify the environment.
+                    current_env_state = self.env_snapshot.get_state()
+                    
+                    # Simulate one step with this specific action pair.
+                    #    The simulation environment has execution probabilities set to 1,
+                    #    so the intended action IS the executed action.
+                    s_prime, _, _ = self.env_snapshot.step((edm, eadv))
+
+                    # Initialize the list if this is the first time we've reached s_prime from s.
+                    if s_prime not in lookup_table[s]:
+                        lookup_table[s][s_prime] = []
+                    
+                    # Add the current action pair to the list of possible causes.
+                    #    This is the core of the logic: we are mapping the outcome (s -> s_prime)
+                    #    back to a cause (the action pair (edm, eadv)).
+                    lookup_table[s][s_prime].append((edm, eadv))
+                    
+                    # Restore the environment to the original starting state.
+                    # This ensures that the next iteration of the inner loop (for the next `eadv`)
+                    # starts from the exact same state `s`, not from the `s_prime` we just reached.
+                    self.reset_sim_env(current_env_state)
+        
+        print("Lookup table computation finished.")
+        return lookup_table
     
