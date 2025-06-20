@@ -728,46 +728,63 @@ class LevelKDPAgent_Stationary(Agent):
         
         # Simulation environment for lookaheads
         self.env_snapshot = copy.deepcopy(env)
+        
+        # Setting probabilities of execution to 1, i.e. no stochasticity.
+        # This is for mapping of reachable states to executed actions.
         self.env_snapshot.blue_player_execution_prob = 1
         self.env_snapshot.red_player_execution_prob = 1
         
         # Determine action spaces and details based on player_id
         if self.player_id == 0:
+            # Extract radix encoded actions
             self.DM_action_details = self.env_snapshot.combined_actions_blue
             self.Adv_action_details = self.env_snapshot.combined_actions_red
+            
+            # Seave number of radix encoded actions
             self.num_DM_actions = len(env.combined_actions_blue)
             self.num_Adv_actions = len(env.combined_actions_red)
+            
+            # Save number of only move actions
             self.DM_available_move_actions_num = len(env.available_move_actions_DM)
             self.Adv_available_move_actions_num = len(env.available_move_actions_Adv)
         else: 
             self.DM_action_details = self.env_snapshot.combined_actions_red
             self.Adv_action_details = self.env_snapshot.combined_actions_blue
+            
             self.num_DM_actions = len(env.combined_actions_red)
             self.num_Adv_actions = len(env.combined_actions_blue)
+            
             self.DM_available_move_actions_num = len(env.available_move_actions_Adv)
             self.Adv_available_move_actions_num = len(env.available_move_actions_DM)
 
-        # Initialize arrays for storing simulation results
+        ## Initialize arrays for storing simulation results
+        
+        # Array for reward of DM mapped to executed actions representing reachable state s'
         self.DM_rewards_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
+        # Array for V(s') = E_{p(b_opp|s')}[V(s',b_opp)] mapped to executed actions representing reachable state s'
         self.future_V_values_executed_array = np.zeros((self.num_DM_actions, self.num_Adv_actions))
 
-        # Pre-calculate the state transition probabilities (for stationary agent)
+        # Pre-calculate the state transition probabilities (for agent with full knowledge of transition model)
         self.prob_exec_tensor = self._calculate_execution_probabilities(env)
         
         # --- Level-Specific Initialization ---
         
+        # Initialize enemy object
         self.enemy = None
+        
+        # Initialize Dirichlet distribution representing model of opponents actions p(b|s)
         self.Dir = None
         
+        # Initizlize arrays base on agents level. 
         if self.k == 1:
-            # BASE CASE: Level-1 agent models opponent with a Dirichlet distribution
+            # BASE CASE: Level-1 agent models opponent with a Dirichlet distribution 
             self.Dir = np.ones((self.n_states, len(self.enemy_action_space)))
         
         elif self.k > 1:
             # RECURSIVE STEP: Level-k agent models opponent as a Level-(k-1) agent
             self.enemy = LevelKDPAgent_Stationary(
                 k=self.k - 1, # The recursive call
-                action_space=self.enemy_action_space,
+                action_space=self.enemy_action_space, # Swapping actions space and enemy action space
                 enemy_action_space=self.action_space,
                 n_states=self.n_states,
                 epsilon=self.epsilon, # Using same parameters for the modeled enemy
@@ -784,6 +801,8 @@ class LevelKDPAgent_Stationary(Agent):
         if self.k == 1:
             # Level-1 models opponent policy from Dirichlet counts
             dir_sum = np.sum(self.Dir[obs])
+            
+            # Robustness check to prevent division by zero
             if dir_sum == 0:
                 # Handle case where state has not been visited to avoid division by zero
                 return np.ones(self.num_Adv_actions) / self.num_Adv_actions
@@ -795,6 +814,7 @@ class LevelKDPAgent_Stationary(Agent):
             
             # Handle the case where there is only one action
             if self.num_Adv_actions > 1:
+                # Construct epsilon-greedy strategy
                 prob_non_optimal = self.epsilon / (self.num_Adv_actions - 1)
                 enemy_policy[:] = prob_non_optimal
                 enemy_policy[enemy_opt_act] = 1.0 - self.epsilon
@@ -805,15 +825,15 @@ class LevelKDPAgent_Stationary(Agent):
             
     def optim_act(self, obs):
         """Selects the optimal action based on the model."""
-        # Expected immediate rewards for each (idm, iadv) pair
+        # Expected immediate rewards for each intended action (idm, iadv) pair
         expected_DM_rewards = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.DM_rewards_executed_array)
-        # Expected future values for each (idm, iadv) pair
+        # Expected future values for each intended action(idm, iadv) pair
         weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.future_V_values_executed_array)
         
         # Get opponent's predicted policy for the current state
         opponent_policy_in_obs = self._get_opponent_policy(obs)
-
-        # Calculate total value for each of our actions, marginalized over opponent's policy
+        
+        # Calculate total value for each of DM actions, marginalized over opponent's policy
         total_action_values = np.dot(expected_DM_rewards, opponent_policy_in_obs) + \
                               self.gamma * np.dot(weighted_sum_future_V, opponent_policy_in_obs)
         
@@ -823,10 +843,15 @@ class LevelKDPAgent_Stationary(Agent):
 
     def act(self, obs, env):
         """Epsilon-greedy action selection."""
-        # Ensure simulations are run for the current state
+        
+        # Simulate all reachable states from the current state (obs)
         self._simulate_executed_outcomes(obs)
+        
+        # Set simulation flag to True to prevent redundant recalculation
+        # of objects necessary for action selection/value fucntion update.
         self._simulate_flag = True
         
+        # Execute epsilon-greedy action selection
         if np.random.rand() < self.epsilon:
             return np.random.choice(self.action_space)
         else:
@@ -847,9 +872,17 @@ class LevelKDPAgent_Stationary(Agent):
         self._simulate_executed_outcomes(obs)
 
         # --- Update V(obs, b_opp) ---
+        
+        # Extract transition model entry for specific taken action
         prob_exec_tensor_fixed_b = self.prob_exec_tensor[:, b_opp_taken_in_obs, :, :]
+        
+        # Calculate expected rewards
         expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, self.DM_rewards_executed_array)
+        
+        # Calculated expected future values
         expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, self.future_V_values_executed_array)
+        
+        # Calculate value of optimal action for each action
         Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
         self.V[obs, b_opp_taken_in_obs] = np.max(Q_values_for_dm_intentions)
         
@@ -857,46 +890,80 @@ class LevelKDPAgent_Stationary(Agent):
         self._simulate_flag = False
 
     def _simulate_executed_outcomes(self, obs):
-        """Simulates all outcomes from 'obs' to get rewards and next states."""
+        """Simulates all outcomes from 'obs' to get rewards and next states and map them to executed actions."""
+        
+        # Check if simulation already ran in this step
         if self._simulate_flag:
             return
 
+        # Reset simulation environment to initial state (obs)
         self.reset_sim_env(obs)
+        
+        # Prepare objects for saving of rewards and state information from reachable states
         executed_action_outcomes = {}
         actual_next_states_set = set()
 
+        # Run through all possible radix encoded actions
         for DM_exec_idx in range(self.num_DM_actions):
             for Adv_exec_idx in range(self.num_Adv_actions):
                 act_comb_executed = (DM_exec_idx, Adv_exec_idx)
+                
+                # Simulate a step with probability 1
                 s_prime, rewards_vec, _ = self.env_snapshot.step(act_comb_executed)
                 
+                # Extract recieved reward based on player_id
                 DM_reward_for_exec = rewards_vec[self.player_id]
+                
+                # Map reached state s' and recieved reward to executed action combination
                 executed_action_outcomes[act_comb_executed] = (s_prime, DM_reward_for_exec)
+                
+                # Save s' to set of reachable states
                 actual_next_states_set.add(s_prime)
+                
+                # Reset simulation before inspecting next set of actions
                 self.reset_sim_env(obs)
 
+        # Calculate expected future value only for reachable states (states with non-zero probability of transition)
         self._calculate_expected_future_value(actual_next_states_set, executed_action_outcomes)
 
     def _calculate_expected_future_value(self, actual_next_states_set, executed_action_outcomes):
-        """Calculates E[V(s', b')] for each possible next state s'."""
+        """Calculates E_{p(b_opp|s'))}[V(s', b')] for each possible next state s'."""
+        
+        # Extract only unique states from reached states
         unique_s_primes = np.array(list(actual_next_states_set), dtype=int)
+        # Initialize array for V(s') = E_{p(b_opp|s'))}[V(s', b')]
         s_prime_to_expected_V = {}
 
+        # Loop through all unique reachable states s'
         for s_prime_idx in unique_s_primes:
+            # Extract values only for reachable states s'
             V_s_prime = self.V[s_prime_idx, :]
+            
+            # Fetch estimate of opponents policy p(b|s)
             opponent_policy_in_s_prime = self._get_opponent_policy(s_prime_idx)
+            
+            # Calculate E_{p(b_opp|s')}[V(s', b')] for specific s'
             s_prime_to_expected_V[s_prime_idx] = np.dot(V_s_prime, opponent_policy_in_s_prime)
         
+        # Map the results to executed actions representing reachable state s'
         for DM_exec_idx in range(self.num_DM_actions):
             for Adv_exec_idx in range(self.num_Adv_actions):
+                # Extract reached state and reward for the agent based on executed actions
                 s_prime, r_DM = executed_action_outcomes[(DM_exec_idx, Adv_exec_idx)]
+                # Map the recieved reward to executed actions pair
                 self.DM_rewards_executed_array[DM_exec_idx, Adv_exec_idx] = r_DM
+                # Map E_{p(b_opp|s')}[V(s', b')] to executed action pair (replacing s' for pair of executed actions)
                 self.future_V_values_executed_array[DM_exec_idx, Adv_exec_idx] = s_prime_to_expected_V.get(s_prime, 0.0)
 
     def reset_sim_env(self, obs):
+        
+        # Reset the saved environment
         self.env_snapshot.reset()
+        
+        # Perform radix decoding of state
         base_pos = self.env_snapshot.N * self.env_snapshot.N
         base_coll = 2
+        
         self.env_snapshot.red_collected_coin2 = bool(obs % base_coll)
         obs //= base_coll
         self.env_snapshot.red_collected_coin1 = bool(obs % base_coll)
@@ -908,12 +975,21 @@ class LevelKDPAgent_Stationary(Agent):
         p2_flat = obs % base_pos
         obs //= base_pos
         p1_flat = obs
+        
+        # Decode state infromation into [x,y] coordinates
         blue_player_col = p1_flat // self.env_snapshot.N
         blue_player_row = p1_flat % self.env_snapshot.N
+        
+        # Set the player location based on decoded information
         self.env_snapshot.blue_player = np.array([blue_player_row, blue_player_col])
+        
+        # Same for the adversary
         red_player_col = p2_flat // self.env_snapshot.N
         red_player_row = p2_flat % self.env_snapshot.N
+        
         self.env_snapshot.red_player = np.array([red_player_row, red_player_col])
+        
+        # Set coin availability based on information about individual player coin collection
         self.env_snapshot.coin1_available = not (self.env_snapshot.blue_collected_coin1 or self.env_snapshot.red_collected_coin1)
         self.env_snapshot.coin2_available = not (self.env_snapshot.blue_collected_coin2 or self.env_snapshot.red_collected_coin2)
 
@@ -926,30 +1002,48 @@ class LevelKDPAgent_Stationary(Agent):
             DM_execution_prob = env.red_player_execution_prob
             Adv_execution_prob = env.blue_player_execution_prob
 
+        # Extract move and push actions for DM and Adv
         DM_moves = self.DM_action_details[:, 0]
         DM_pushes = self.DM_action_details[:, 1]
         Adv_moves = self.Adv_action_details[:, 0]
         Adv_pushes = self.Adv_action_details[:, 1]
         
+        # Initialize array for saving probabilities of reaching reachable state s'
+        # represented as combination of executed actions of DM and Adv 
         prob_DM_part = np.zeros((self.num_DM_actions, self.num_DM_actions))
+        
+        # Calculate logic mask representing match of intended move and executed move action
+        # Note: Push is deterministic
         DM_moves_match = (DM_moves[:, np.newaxis] == DM_moves[np.newaxis, :])
         DM_pushes_match = (DM_pushes[:, np.newaxis] == DM_pushes[np.newaxis, :])
+        
+        # Set the probabilities of intended action executing (intended action == executed action)
+        # to execution probability provided from the environment
         prob_DM_part[DM_moves_match & DM_pushes_match] = DM_execution_prob
         
+        # Set the probabilities of unintended action executing to uniform 
         num_alt_DM = self.DM_available_move_actions_num - 1
+        
+        # Robustness check if num of actions is > 0
         if num_alt_DM > 0:
             prob_DM_part[~DM_moves_match & DM_pushes_match] = (1.0 - DM_execution_prob) / num_alt_DM
         
+        # Set the same for Adversary
         prob_Adv_part = np.zeros((self.num_Adv_actions, self.num_Adv_actions))
+        
         Adv_moves_match = (Adv_moves[:, np.newaxis] == Adv_moves[np.newaxis, :])
         Adv_pushes_match = (Adv_pushes[:, np.newaxis] == Adv_pushes[np.newaxis, :])
+        
         prob_Adv_part[Adv_moves_match & Adv_pushes_match] = Adv_execution_prob
         
         num_alt_Adv = self.Adv_available_move_actions_num - 1
         if num_alt_Adv > 0:
             prob_Adv_part[~Adv_moves_match & Adv_pushes_match] = (1.0 - Adv_execution_prob) / num_alt_Adv
         
+        # Calculate probability of reaching state s'
+        # represented using probability of executing intended actions as product of probabilities of execution of DM and Adv actions
         prob_exec_tensor = prob_DM_part[:, np.newaxis, :, np.newaxis] * prob_Adv_part[np.newaxis, :, np.newaxis, :]
+        
         return prob_exec_tensor
     
 
@@ -1030,6 +1124,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         self.prob_exec_tensor = None 
 
         # 5D array for Dirichlet counts: P(idm, iadv, s_start, edm, eadv)
+        # Where (edm, eadv) represent executed actions, which are placeholder for s'. This is done for numerical tracability of the whole method.
         # We learn a separate transition model for each starting state 's'.
         self.transition_model_weights = np.ones(
             (self.num_DM_actions, self.num_Adv_actions, self.n_states, self.num_DM_actions, self.num_Adv_actions)
@@ -1041,14 +1136,14 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
 
         # Override the opponent model to be dynamic.
         if self.k > 1:
-            self.enemy = LevelKDPAgent_Dynamic( # Recursive call to the Dynamic class
-                k=self.k - 1,
-                action_space=self.enemy_action_space,
-                enemy_action_space=self.action_space,
+            self.enemy = LevelKDPAgent_Dynamic( 
+                k=self.k - 1, # Recursive call to the Dynamic class
+                action_space=self.enemy_action_space, # Swapping actions space and enemy action space
+                enemy_action_space=self.action_space, 
                 n_states=self.n_states,
-                epsilon=self.epsilon,
+                epsilon=self.epsilon, # Using same parameters for the modeled enemy
                 gamma=self.gamma,
-                player_id=1 - self.player_id,
+                player_id=1 - self.player_id, # Opponent has the opposite player_id
                 env=env
             )
 
@@ -1058,7 +1153,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         based on the learned transition_model_weights.
         """
         weights_for_obs = self.transition_model_weights[:, :, obs, :, :]
-        total_counts = np.sum(weights_for_obs, axis=(2, 3), keepdims=True)
+        total_counts = np.sum(weights_for_obs, axis=(2, 3), keepdims=True) # Keep dimensions the same for broadcasting
         
         # Use np.divide to handle states that have never been visited (total_counts=0)
         prob_tensor_for_obs = np.divide(
@@ -1084,11 +1179,13 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         Selects the optimal action for a dynamic agent.
         This method is self-sufficient and does not rely on `act` being called first.
         """
-        # Calculate the state transition in optim_act
-        # Note: This is primaraly so that the hierarchical k-level structure works.
+        # 
+        # Note: This call might seem redundant as we call this method in act(), but it is crucial for level-k initialization.
+        #       As the upper most level utilizes only optim_act() method of lower level agents.
+        #       And thus does not extract the oponents policy estimate for current observation.
         current_prob_tensor = self._get_probabilities_for_state(obs)
 
-        # Now, proceed with the original logic from the stationary agent,
+        # Proceed with the inherited logic logic from the stationary agent,
         # but using the just-calculated tensor.
         expected_DM_rewards = np.einsum('ijkl,kl->ij', current_prob_tensor, self.DM_rewards_executed_array)
         weighted_sum_future_V = np.einsum('ijkl,kl->ij', current_prob_tensor, self.future_V_values_executed_array)
@@ -1107,7 +1204,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         Updates the value function and the learned transition model.
         """
         # First, update the transition model with the new observation.
-        # Note: This must be done BEFORE the value function is updated.
+        # Note: This must be done BEFORE the value function is updated to get most up to date version of transition model.
         idm, iadv = actions
         
         # Look up all possible executed actions that could explain the transition from obs to new_obs
@@ -1131,11 +1228,13 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         This tells us which executed actions could lead from state s to s'.
         This is computationally expensive and should only be run once.
         """
-        print("Pre-computing the s' to executed actions lookup table. This may take a while...")
+        print("Pre-computing the s' to executed actions lookup table for agent at level-" + str(self.k) + ". This may take a while...")
         
         lookup_table = {}
         for s in range(self.n_states):
             lookup_table[s] = {}
+            # Robustness check for inherited reset_sim_env method.
+            # If it happends that the state cannot be reset into for some reason.
             try:
                 self.reset_sim_env(s)
             except (IndexError, ValueError):
@@ -1146,9 +1245,6 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
                 
                 # Loop through every possible EXECUTED action for the Adversary (Adv)
                 for eadv in range(self.num_Adv_actions):
-
-                    # By nesting these loops, we are systematically checking every single
-                    # combination of executed actions that could happen in the game.
                     
                     # Save the starting state before we modify the environment.
                     current_env_state = self.env_snapshot.get_state()
