@@ -397,21 +397,42 @@ class LevelKDPAgent_Stationary(Agent):
         max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
         return np.random.choice(max_indices)
 
-    def act(self, obs, env):
-        """Epsilon-greedy action selection."""
-        
-        # Simulate all reachable states from the current state (obs)
-        self._simulate_executed_outcomes(obs)
-        
-        # Set simulation flag to True to prevent redundant recalculation
-        # of objects necessary for action selection/value fucntion update.
-        self._simulate_flag = True
-        
-        # Execute epsilon-greedy action selection
-        if np.random.rand() < self.epsilon:
-            return np.random.choice(self.action_space)
+    def get_policy(self, obs):
+        """
+        Calculates this agent's own epsilon-greedy policy distribution.
+        This is the same logic used to model the opponent.
+        """
+        # Get the optimal action deterministically.
+        optimal_action_idx = self.optim_act(obs)
+
+        # Construct the epsilon-greedy policy distribution.
+        num_actions = len(self.action_space)
+        policy = np.zeros(num_actions)
+
+        if num_actions > 1:
+            prob_non_optimal = self.epsilon / num_actions
+            policy[:] = prob_non_optimal
+            policy[optimal_action_idx] += 1.0 - self.epsilon
         else:
-            return self.optim_act(obs)
+            policy[optimal_action_idx] = 1.0
+
+        # Ensure probabilities sum to 1, correcting for potential float precision errors
+        return policy / np.sum(policy)
+
+    def act(self, obs, env):
+        """
+        Epsilon-greedy action selection based on a full policy distribution.
+        """
+        # Ensure all necessary simulations for the current state are run.
+        # This is required by optim_act, which is called by get_policy.
+        self._simulate_executed_outcomes(obs)
+        self._simulate_flag = True
+
+        # Get the policy distribution for the current state
+        policy = self.get_policy(obs)
+
+        # Sample an action from the policy
+        return choice(self.action_space, p=policy)
 
     def update(self, obs, actions, rewards, new_obs):
         """Updates the agent's value function and internal models."""
@@ -632,7 +653,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
                 env=env
             )
     
-    def _recalculate_transition_model(self, env):
+    def recalculate_transition_model(self, env):
         """
         Recursively recalculates the transition probability tensor for this agent
         and all agents in its opponent model hierarchy.
@@ -642,7 +663,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
 
         # Recursively call for the opponent model if it exists
         if self.k > 1 and self.enemy:
-            self.enemy._recalculate_transition_model(env)
+            self.enemy.recalculate_transition_model(env)
 
     def act(self, obs, env):
         """
@@ -650,7 +671,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
         First, it updates the transition model based on the current environment state.
         """
         # Recalculate the transition probabilities for this agent and its opponent model
-        self._recalculate_transition_model(env)
+        self.recalculate_transition_model(env)
         
         # Now, call the parent's act method, which will use the updated prob_exec_tensor
         return super().act(obs, env)
@@ -700,7 +721,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
                 env=env
             )
 
-    def _get_probabilities_for_state(self, obs):
+    def get_probabilities_for_state(self, obs):
         """
         Calculates P(edm, eadv | s=obs, idm, iadv) for a single given state
         based on the learned transition_model_weights.
@@ -721,7 +742,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         Selects the optimal action for a dynamic agent.
         """
         # Extrat the transition probabilities for the current state (obs)
-        self.prob_exec_tensor = self._get_probabilities_for_state(obs)
+        self.prob_exec_tensor = self.get_probabilities_for_state(obs)
 
         return super().optim_act(obs)
 
@@ -741,7 +762,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
             self.transition_model_weights[idm, iadv, obs, edm, eadv] += 1
         
         # After updating the model, get the fresh probability tensor for this state.
-        self.prob_exec_tensor = self._get_probabilities_for_state(obs)
+        self.prob_exec_tensor = self.get_probabilities_for_state(obs)
         
         # Call the parent's update method to handle the Bellman update for V(s,b)
         # and the recursive update of the opponent model.
