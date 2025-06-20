@@ -349,7 +349,7 @@ class LevelKDPAgent_Stationary(Agent):
                 env=env
             )
 
-    def _get_opponent_policy(self, obs):
+    def get_opponent_policy(self, obs):
         """
         Abstracts the way the opponent's policy is estimated based on the agent's level k.
         Returns a probability distribution over the opponent's actions in state 'obs'.
@@ -371,9 +371,9 @@ class LevelKDPAgent_Stationary(Agent):
             # Handle the case where there is only one action
             if self.num_Adv_actions > 1:
                 # Construct epsilon-greedy strategy
-                prob_non_optimal = self.epsilon / (self.num_Adv_actions - 1)
+                prob_non_optimal = self.epsilon / (self.num_Adv_actions)
                 enemy_policy[:] = prob_non_optimal
-                enemy_policy[enemy_opt_act] = 1.0 - self.epsilon
+                enemy_policy[enemy_opt_act] += 1.0 - self.epsilon
             else:
                 enemy_policy[enemy_opt_act] = 1.0
 
@@ -387,7 +387,7 @@ class LevelKDPAgent_Stationary(Agent):
         weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, self.future_V_values_executed_array)
         
         # Get opponent's predicted policy for the current state
-        opponent_policy_in_obs = self._get_opponent_policy(obs)
+        opponent_policy_in_obs = self.get_opponent_policy(obs)
         
         # Calculate total value for each of DM actions, marginalized over opponent's policy
         total_action_values = np.dot(expected_DM_rewards, opponent_policy_in_obs) + \
@@ -496,7 +496,7 @@ class LevelKDPAgent_Stationary(Agent):
             V_s_prime = self.V[s_prime_idx, :]
             
             # Fetch estimate of opponents policy p(b|s)
-            opponent_policy_in_s_prime = self._get_opponent_policy(s_prime_idx)
+            opponent_policy_in_s_prime = self.get_opponent_policy(s_prime_idx)
             
             # Calculate E_{p(b_opp|s')}[V(s', b')] for specific s'
             s_prime_to_expected_V[s_prime_idx] = np.dot(V_s_prime, opponent_policy_in_s_prime)
