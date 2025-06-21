@@ -331,7 +331,10 @@ class LevelKDPAgent_Stationary(Agent):
         This maps (s, edm, eadv) -> (s', r) for all states and executed actions,
         eliminating the need for simulation in the main training loop.
         """
-        print(f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent... (this may take a moment)")
+        if self.player_id == 0:
+            print(f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (DM)... (this may take a moment)")
+        else:
+            print(f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (Adv)... (this may take a moment)")
         s_prime_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions), dtype=int)
         r_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions))
 
