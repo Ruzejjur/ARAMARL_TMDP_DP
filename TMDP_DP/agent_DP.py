@@ -335,6 +335,7 @@ class LevelKDPAgent_Stationary(Agent):
             print(f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (DM)... (this may take a moment)")
         else:
             print(f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (Adv)... (this may take a moment)")
+        
         s_prime_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions), dtype=int)
         r_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions))
 
@@ -349,8 +350,14 @@ class LevelKDPAgent_Stationary(Agent):
                     # Save state before stepping
                     current_env_state = self.env_snapshot.get_state()
                     
-                    # Simulate one step with the executed action pair
-                    s_prime, rewards_vec, _ = self.env_snapshot.step((edm, eadv))
+                    # Create the action pair in the correct [blue, red] order for the engine
+                    if self.player_id == 0: # I am the Blue Player (DM)
+                        action_pair = (edm, eadv)
+                    else: # I am the Red Player (Adv)
+                        action_pair = (eadv, edm)
+
+                    # Simulate one step with the correctly ordered action pair
+                    s_prime, rewards_vec, _ = self.env_snapshot.step(action_pair)
                     
                     # Store the resulting state and reward
                     s_prime_lookup[s, edm, eadv] = s_prime
@@ -359,7 +366,7 @@ class LevelKDPAgent_Stationary(Agent):
                     # Restore environment to the original state for the next action pair
                     self.reset_sim_env(current_env_state)
         
-        print("Model pre-computation finished.")
+        print("Lookup table pre-computation finished.")
         return s_prime_lookup, r_lookup
 
     def get_opponent_policy(self, obs):
@@ -474,7 +481,7 @@ class LevelKDPAgent_Stationary(Agent):
 
     def reset_sim_env(self, obs):
         """Resets the simulation environment to a specific state observation for model pre-computation."""
-        # ... (This function remains unchanged and correct) ...
+        
         self.env_snapshot.reset()
         base_pos, base_coll = self.env_snapshot.N**2, 2
         state_copy = obs
@@ -493,7 +500,7 @@ class LevelKDPAgent_Stationary(Agent):
     
     def _calculate_execution_probabilities(self, env):
         """Calculates the state-independent transition tensor P(executed | intended)."""
-        # ... (This function remains unchanged and correct) ...
+        
         if self.player_id == 0:
             DM_exec_prob, Adv_exec_prob = env.blue_player_execution_prob, env.red_player_execution_prob
         else:
