@@ -36,6 +36,11 @@ class Agent():
         For example, this is were a Q-learning agent would update her Q-function.
         """
         pass
+    
+    def update_epsilon(self, new_epsilon):
+        """Updating the epsilon for the whole hierarchy."""
+        
+        raise NotImplementedError()
 
 
 class RandomAgent(Agent):
@@ -86,6 +91,12 @@ class IndQLearningAgent(Agent):
         r0, _ = rewards
 
         self.Q[obs, a0] = (1 - self.alpha)*self.Q[obs, a0] + self.alpha*(r0 + self.gamma*np.max(self.Q[new_obs, :]))
+        
+    
+    def update_epsilon(self, new_epsilon):
+        """Updating the epsilon for the whole hierarchy."""
+        
+        self.epsilon = new_epsilon
         
 class IndQLearningAgentSoftmax(IndQLearningAgent):
     """ A vanilla Q-learning agent that applies softmax policy."""
@@ -208,6 +219,13 @@ class LevelKQAgent(Agent):
         # Update our own Q-function
         current_q = self.Q[obs, a_dm, a_adv]
         self.Q[obs, a_dm, a_adv] = (1 - self.alpha) * current_q + self.alpha * (r_dm + self.gamma * max_q_new)
+        
+    def update_epsilon(self, new_epsilon):
+        """Updating the epsilon for the whole hierarchy."""
+        
+        self.epsilon = new_epsilon
+        if self.k > 1 and self.enemy:
+            self.enemy.update_epsilon(new_epsilon)
 
 
 class LevelKQAgentSoftmax(LevelKQAgent):
@@ -522,6 +540,12 @@ class LevelKDPAgent_Stationary(Agent):
 
         return prob_DM[:, np.newaxis, :, np.newaxis] * prob_Adv[np.newaxis, :, np.newaxis, :]
 
+    def update_epsilon(self, new_epsilon):
+        """Updating the epsilon for the whole hierarchy."""
+        
+        self.epsilon = new_epsilon
+        if self.k > 1 and self.enemy:
+            self.enemy.update_epsilon(new_epsilon)
 
 class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
     """
