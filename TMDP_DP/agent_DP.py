@@ -14,6 +14,12 @@ def softmax(x, beta=1.0):
     e_x = np.exp(beta * x)
     return e_x / np.sum(e_x)
 
+def manhattan_distance(p, q):
+    if len(p) != len(q):
+        raise ValueError("Points must have the same dimension")
+    return sum(abs(a - b) for a, b in zip(p, q))
+
+
 class Agent():
     """
     Parent abstract Agent.
@@ -42,22 +48,114 @@ class Agent():
         
         raise NotImplementedError()
 
+### ============ Simple agents ============
 
-class RandomAgent(Agent):
+class ManhattanAgent(Agent):
     """
-    An agent that with probability p chooses the first action
+    A simple agent which minimizes Manhattan distance to the closest available coin and does not utilize the push action.
+    In case of ties between distances, the agent chooses its target coin randomly.
     """
 
-    def __init__(self, action_space, p):
+    def __init__(self, action_space, coin_location, grid_size, player_id):
         Agent.__init__(self, action_space)
-        self.p = p
+        
+        # Save grid size for state decoding
+        self.grid_size = grid_size
+        
+        # Set player id (0 for blue, 1 for red)
+        self.player_id = player_id
+        
+        # Set coin locations
+        self.coin_location = coin_location
+        
+    def decode_state(self, obs):
+        """Decodes the state ID to get positions and coin availability."""
+        
+        base_pos, base_coll = self.grid_size**2, 2
+        state_copy = obs
+        c_r2 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_r1 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_b2 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_b1 = bool(state_copy % base_coll); state_copy //= base_coll
+        p2_flat = state_copy % base_pos; state_copy //= base_pos
+        p1_flat = state_copy
+        
+        blue_player = np.array([p1_flat % self.grid_size, p1_flat // self.grid_size])
+        red_player = np.array([p2_flat % self.grid_size, p2_flat // self.grid_size])
+        
+        coin1_available = not (c_b1 or c_r1)
+        coin2_available = not (c_b2 or c_r2)
 
-    def act(self, obs, env):
+        return blue_player, red_player, coin1_available, coin2_available
+    
+    def compute_action(self, direction_vec):
+        """Computes a move action (0-3) based on a direction vector."""
+        # Horizontal movement only
+        if direction_vec[0] == 0: 
+            return 1 if direction_vec[1] > 0 else 3
+        # Vertical movement only
+        elif direction_vec[1] == 0: 
+            return 2 if direction_vec[0] > 0 else 0
+        # Diagonal movement, choose randomly between vertical and horizontal
+        else: 
+            if direction_vec[0] > 0 and direction_vec[1] > 0: # Down-Right
+                return choice(np.array([2, 1]), p=[0.5,0.5])
+            elif direction_vec[0] > 0 and direction_vec[1] < 0: # Down-Left
+                return choice(np.array([2, 3]), p=[0.5,0.5])
+            elif direction_vec[0] < 0 and direction_vec[1] > 0: # Up-Right
+                return choice(np.array([0, 1]), p=[0.5,0.5])
+            else: # Up-Left
+                return choice(np.array([0, 3]), p=[0.5,0.5])
 
-        assert len(self.action_space) == 2
-        return choice(self.action_space, p=[self.p, 1-self.p])
+    def act(self, obs, env=None):
+        """
+        Decides which action to take.
+        1. Finds the closest available coin.
+        2. Computes the direction towards it.
+        3. Selects a move action to reduce the distance.
+        """
+        blue_player, red_player, coin1_available, coin2_available = self.decode_state(obs)
 
-    " This agent is so simple it doesn't even need to implement the update method! "
+        # Determine the agent's current position
+        player_pos = blue_player if self.player_id == 0 else red_player
+
+        # Set coin positions
+        coin1_pos = self.coin_location[0]
+        coin2_pos = self.coin_location[1]
+        
+        # Calculate Manhattan distances to each coin, if it's available
+        dist1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
+        dist2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
+
+        target_direction = None
+        
+        # If both coins are gone, just move randomly (e.g., up/down)
+        if not coin1_available and not coin2_available:
+            return choice(np.array([0, 2]), p=[0.5, 0.5])
+
+        # Decide which coin to target based on distance
+        if dist1 < dist2:
+            target_direction = coin1_pos - player_pos
+        elif dist2 < dist1:
+            target_direction = coin2_pos - player_pos
+        else: # Distances are equal (or only one coin is left)
+            # If both are available and equidistant, choose one randomly
+            if coin1_available and coin2_available:
+                chosen_coin_pos = coin1_pos if np.random.rand() < 0.5 else coin2_pos
+                target_direction = chosen_coin_pos - player_pos
+            # Otherwise, target the only available coin
+            elif coin1_available:
+                target_direction = coin1_pos - player_pos
+            else: # only coin2 is available
+                target_direction = coin2_pos - player_pos
+
+        # Compute the move action (0-3). This index works for the combined action
+        # because the first 4 actions in the environment are the 'no push' moves.
+        return self.compute_action(target_direction)
+
+
+    
+### ============ Q-learning agents ============ 
 
 
 class IndQLearningAgent(Agent):
@@ -109,8 +207,6 @@ class IndQLearningAgentSoftmax(IndQLearningAgent):
     def act(self, obs, env):
         
         return choice(self.action_space, p=softmax(self.Q[obs,:],self.beta))
-    
-### ============ Q-learning agents ============ 
 
 class LevelKQAgent(Agent):
     """
