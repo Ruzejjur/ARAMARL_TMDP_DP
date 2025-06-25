@@ -52,7 +52,7 @@ class Agent():
 
 class ManhattanAgent(Agent):
     """
-    A simple agent which minimizes Manhattan distance to the closest available coin and does not utilize the push action.
+    A simple agent which minimizes Manhattan distance to the closest available coin and utilizes the push action when the players are adjacent.
     In case of ties between distances, the agent chooses its target coin randomly.
     """
 
@@ -71,7 +71,10 @@ class ManhattanAgent(Agent):
     def decode_state(self, obs):
         """Decodes the state ID to get positions and coin availability."""
         
+        # Setting bases for radix decoding
         base_pos, base_coll = self.grid_size**2, 2
+        
+        # Radix decoding of state
         state_copy = obs
         c_r2 = bool(state_copy % base_coll); state_copy //= base_coll
         c_r1 = bool(state_copy % base_coll); state_copy //= base_coll
@@ -80,53 +83,85 @@ class ManhattanAgent(Agent):
         p2_flat = state_copy % base_pos; state_copy //= base_pos
         p1_flat = state_copy
         
+        # Decoding player locations on the grid
         blue_player = np.array([p1_flat % self.grid_size, p1_flat // self.grid_size])
-        red_player = np.array([p2_flat % self.grid_size, p2_flat // self.grid_size])
+        red_player_pos = np.array([p2_flat % self.grid_size, p2_flat // self.grid_size])
         
+        # Setting coin availability based on coin collection indicators from the state
         coin1_available = not (c_b1 or c_r1)
         coin2_available = not (c_b2 or c_r2)
 
-        return blue_player, red_player, coin1_available, coin2_available
+        return blue_player, red_player_pos, coin1_available, coin2_available
     
-    def compute_action(self, direction_vec):
-        """Computes a move action (0-3) based on a direction vector."""
+    def _are_players_adjacent(self, player1_pos, player2_pos):
+        # Checks if players are in immediately neighboring cells (8 directions)
+        
+        # Calculate the absolute difference in row and column coordinates
+        row_diff_abs = np.abs(player1_pos[0] - player2_pos[0])
+        col_diff_abs = np.abs(player1_pos[1] - player2_pos[1])
+        
+        # For 8-directional adjacency (including diagonals):
+        # - The maximum coordinate difference must be 1.
+        # - This also implies they are not on the same cell (where max diff would be 0).
+        return np.max([row_diff_abs, col_diff_abs]) == 1
+    
+    def compute_action(self, direction_vec, players_are_adjacent):
+        """Computes a move action (0-3) based on a direction vector and push action based on adjacency."""
+        
+        # Radix shift of action selection based on adjacency
+        radix_shift = 4 if players_are_adjacent else 0
+        
         # Horizontal movement only
         if direction_vec[0] == 0: 
-            return 1 if direction_vec[1] > 0 else 3
+            return (1 if direction_vec[1] > 0 else 3) + radix_shift
+
         # Vertical movement only
         elif direction_vec[1] == 0: 
-            return 2 if direction_vec[0] > 0 else 0
+            return (2 if direction_vec[0] > 0 else 0) + radix_shift # Down else Up
+        
         # Diagonal movement, choose randomly between vertical and horizontal
+        # as the Manhattan distance in this case is the same
         else: 
             if direction_vec[0] > 0 and direction_vec[1] > 0: # Down-Right
-                return choice(np.array([2, 1]), p=[0.5,0.5])
+                return choice(np.array([2, 1]), p=[0.5,0.5]) + radix_shift
+
+                
             elif direction_vec[0] > 0 and direction_vec[1] < 0: # Down-Left
-                return choice(np.array([2, 3]), p=[0.5,0.5])
+                return choice(np.array([2, 3]), p=[0.5,0.5]) + radix_shift
+                
+                
             elif direction_vec[0] < 0 and direction_vec[1] > 0: # Up-Right
-                return choice(np.array([0, 1]), p=[0.5,0.5])
+                return choice(np.array([0, 1]), p=[0.5,0.5]) + radix_shift
+                
             else: # Up-Left
-                return choice(np.array([0, 3]), p=[0.5,0.5])
+                return choice(np.array([0, 3]), p=[0.5,0.5]) + radix_shift
 
     def act(self, obs, env=None):
         """
         Decides which action to take.
         1. Finds the closest available coin.
         2. Computes the direction towards it.
-        3. Selects a move action to reduce the distance.
+        3. Selects a move action to reduce the distance and push the opponent if it is near.
         """
-        blue_player, red_player, coin1_available, coin2_available = self.decode_state(obs)
+        # Decoding radix encoded state
+        blue_player_pos, red_player_pos, coin1_available, coin2_available = self.decode_state(obs)
 
-        # Determine the agent's current position
-        player_pos = blue_player if self.player_id == 0 else red_player
+        # Determine the agent's current position based on player_id
+        player_pos = blue_player_pos if self.player_id == 0 else red_player_pos
 
+        # Check if player are adjacent
+        players_are_adjacent = self._are_players_adjacent(blue_player_pos, red_player_pos)
+        
         # Set coin positions
         coin1_pos = self.coin_location[0]
         coin2_pos = self.coin_location[1]
         
         # Calculate Manhattan distances to each coin, if it's available
+        # Set distance do ininity if not
         dist1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
         dist2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
 
+        # Initialize target directional vector
         target_direction = None
         
         # If both coins are gone, just move randomly (e.g., up/down)
@@ -149,12 +184,76 @@ class ManhattanAgent(Agent):
             else: # only coin2 is available
                 target_direction = coin2_pos - player_pos
 
-        # Compute the move action (0-3). This index works for the combined action
+        # Compute the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
         # because the first 4 actions in the environment are the 'no push' moves.
-        return self.compute_action(target_direction)
-
-
+        return self.compute_action(target_direction, players_are_adjacent)
     
+class ManhattanAgent_Passive(ManhattanAgent):
+    """
+    A Manhattan agent that never uses the push action.
+    """
+    def compute_action(self, direction_vec, players_are_adjacent):
+        # Call the parent's method but always with players_are_adjacent=False
+        # This ensures the radix_shift is never applied.
+        return super().compute_action(direction_vec, False)
+    
+class ManhattanAgent_Aggressive(ManhattanAgent):
+    """
+    A Manhattan agent that always uses the push action and targets player if it is closer to player than a coin.
+    """
+    
+    def act(self, obs, env=None):
+        """
+        Decides which action to take.
+        1. Finds the closest available coin or opponent
+        2. Computes the direction towards it.
+        3. Selects a move action to reduce the distance and push the opponent if it is near.
+        """
+        # Decoding radix encoded state
+        blue_player_pos, red_player_pos, coin1_available, coin2_available = self.decode_state(obs)
+
+        # Determine the agent's and opponent's current position based on player_id
+        player_pos = blue_player_pos if self.player_id == 0 else red_player_pos
+        opponent_pos = red_player_pos if self.player_id == 0 else blue_player_pos
+        
+        # Check if player are adjacent
+        players_are_adjacent = self._are_players_adjacent(blue_player_pos, red_player_pos)
+        
+        # Set coin positions
+        coin1_pos = self.coin_location[0]
+        coin2_pos = self.coin_location[1]
+        
+        # Location of target objects array 
+        target_loc = np.array([coin1_pos, coin2_pos, opponent_pos])
+        
+        # Calculate Manhattan distances to each coin, if it's available
+        # Set distance do ininity if not
+        dist1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
+        dist2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
+        dist3 = manhattan_distance(player_pos, opponent_pos)
+
+        # Array of distances 
+        dist_array = np.array([dist1, dist2, dist3])
+
+        # Detect indicies of equal distances to targets
+        min_dist_idx = np.flatnonzero(dist_array == np.min(dist_array))
+
+        # Break ties randomly
+        min_dist_idx = choice(min_dist_idx)
+        
+        # Initialize target directional vector
+        target_direction = dist_array[min_dist_idx] - player_pos
+    
+        if not coin1_available and min_dist_idx == 0: # only coin2 is available
+            target_direction = coin2_pos - player_pos
+        elif not coin2_available and min_dist_idx == 1: # only coin1 is available
+            target_direction = coin1_pos - player_pos
+
+        # Compute the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
+        # because the first 4 actions in the environment are the 'no push' moves.
+        return self.compute_action(target_direction, players_are_adjacent)
+    
+
 ### ============ Q-learning agents ============ 
 
 
