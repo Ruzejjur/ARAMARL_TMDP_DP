@@ -199,7 +199,7 @@ class ManhattanAgent_Passive(ManhattanAgent):
     
 class ManhattanAgent_Aggressive(ManhattanAgent):
     """
-    A Manhattan agent that always uses the push action and targets player if it is closer to player than a coin.
+    A Manhattan agent that always uses the push action and targets opponent if it is closer to player than a coin.
     """
     
     def act(self, obs, env=None):
@@ -227,7 +227,7 @@ class ManhattanAgent_Aggressive(ManhattanAgent):
         target_loc = np.array([coin1_pos, coin2_pos, opponent_pos])
         
         # Calculate Manhattan distances to each coin, if it's available
-        # Set distance do ininity if not
+        # Set distance do ininity if not.
         dist1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
         dist2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
         dist3 = manhattan_distance(player_pos, opponent_pos)
@@ -238,17 +238,79 @@ class ManhattanAgent_Aggressive(ManhattanAgent):
         # Detect indicies of equal distances to targets
         min_dist_idx = np.flatnonzero(dist_array == np.min(dist_array))
 
-        # Break ties randomly
-        min_dist_idx = choice(min_dist_idx)
+        # In case of tie with targeting the opponen choose to target the closest coin
+        if 2 in min_dist_idx and any(i in min_dist_idx for i in (0, 1, 2, 3)):
+            min_dist_idx = np.argmin(dist_array[0:2]) # Re-evaluate distance between coins
+        else:
+            # Break ties randomly
+            min_dist_idx = choice(min_dist_idx)
         
         # Initialize target directional vector
-        target_direction = dist_array[min_dist_idx] - player_pos
+        target_direction = target_loc[min_dist_idx] - player_pos
     
-        if not coin1_available and min_dist_idx == 0: # only coin2 is available
-            target_direction = coin2_pos - player_pos
-        elif not coin2_available and min_dist_idx == 1: # only coin1 is available
-            target_direction = coin1_pos - player_pos
+        # Compute the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
+        # because the first 4 actions in the environment are the 'no push' moves.
+        return self.compute_action(target_direction, players_are_adjacent)
+    
+class ManhattanAgent_Ultra_Aggressive(ManhattanAgent):
+    """
+    An aggressive Manhattan agent that identifies the most 'urgent' target on the board.
 
+    It calculates five key distances: player-to-coin1, player-to-coin2, 
+    opponent-to-coin1, opponent-to-coin2, and player-to-opponent. It then
+    targets the subject of whichever distance is the absolute minimum, allowing it
+    to dynamically switch between scoring, attacking, and intercepting. It will
+    always use the push action if adjacent to the opponent.
+    """
+    
+    def act(self, obs, env=None):
+        """
+        Decides which action to take.
+        1. Finds the closest available coin or opponent.
+        2. Computes the direction towards it.
+        3. Selects a move action to reduce the distance and push the opponent if it is near.
+        """
+        # Decoding radix encoded state
+        blue_player_pos, red_player_pos, coin1_available, coin2_available = self.decode_state(obs)
+
+        # Determine the agent's and opponent's current position based on player_id
+        player_pos = blue_player_pos if self.player_id == 0 else red_player_pos
+        opponent_pos = red_player_pos if self.player_id == 0 else blue_player_pos
+        
+        # Check if player are adjacent
+        players_are_adjacent = self._are_players_adjacent(blue_player_pos, red_player_pos)
+        
+        # Set coin positions
+        coin1_pos = self.coin_location[0]
+        coin2_pos = self.coin_location[1]
+        
+        # Location of target objects array 
+        target_loc = np.array([coin1_pos, coin2_pos, coin1_pos, coin2_pos, opponent_pos])
+        
+        # Calculate Manhattan distances to each coin, if it's available
+        # Set distance do ininity if not.
+        dist1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
+        dist2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
+        dist3 = manhattan_distance(opponent_pos, coin1_pos) if coin1_available else float('inf')
+        dist4 = manhattan_distance(opponent_pos, coin2_pos) if coin2_available else float('inf')
+        dist5 = manhattan_distance(player_pos, opponent_pos)
+        
+        # Array of distances 
+        dist_array = np.array([dist1, dist2, dist3, dist4, dist5])
+
+        # Detect indicies of equal distances to targets
+        min_dist_idx = np.flatnonzero(dist_array == np.min(dist_array))
+
+        # In case of tie with targeting the opponen choose to target the closest coin
+        if 4 in min_dist_idx and any(i in min_dist_idx for i in (0, 1, 2, 3)):
+            min_dist_idx = np.argmin(dist_array[0:4]) # Re-evaluate distance between coins
+        else:
+            # Break ties randomly
+            min_dist_idx = choice(min_dist_idx)
+        
+        # Initialize target directional vector
+        target_direction = target_loc[min_dist_idx] - player_pos
+    
         # Compute the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
         # because the first 4 actions in the environment are the 'no push' moves.
         return self.compute_action(target_direction, players_are_adjacent)
