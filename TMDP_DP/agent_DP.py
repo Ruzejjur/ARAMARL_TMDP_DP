@@ -68,6 +68,9 @@ class ManhattanAgent(Agent):
         # Set coin locations
         self.coin_location = coin_location
         
+        # Initializing array for temporary savinf of possible radix encoded actions
+        self.possible_actions = None
+        
     def decode_state(self, obs):
         """Decodes the state ID to get positions and coin availability."""
         
@@ -105,36 +108,34 @@ class ManhattanAgent(Agent):
         # - This also implies they are not on the same cell (where max diff would be 0).
         return np.max([row_diff_abs, col_diff_abs]) == 1
     
-    def compute_action(self, direction_vec, players_are_adjacent):
-        """Computes a move action (0-3) based on a direction vector and push action based on adjacency."""
-        
-        # Radix shift of action selection based on adjacency
-        radix_shift = 4 if players_are_adjacent else 0
-        
-        # Horizontal movement only
-        if direction_vec[0] == 0: 
-            return (1 if direction_vec[1] > 0 else 3) + radix_shift
+    def compute_possible_actions(self, direction_vec, players_are_adjacent):
+        """
+        Computes a numpy array of possible optimal move actions and a push action based on player adjacency,
+        which can be a single action or two actions in case of a diagonal move.
+        """
+        possible_moves = []
+        row_dir, col_dir = direction_vec[0], direction_vec[1]
 
-        # Vertical movement only
-        elif direction_vec[1] == 0: 
-            return (2 if direction_vec[0] > 0 else 0) + radix_shift # Down else Up
-        
-        # Diagonal movement, choose randomly between vertical and horizontal
-        # as the Manhattan distance in this case is the same
-        else: 
-            if direction_vec[0] > 0 and direction_vec[1] > 0: # Down-Right
-                return choice(np.array([2, 1]), p=[0.5,0.5]) + radix_shift
+        # Determine vertical move component
+        if row_dir > 0:
+            possible_moves.append(2) # Down
+        elif row_dir < 0:
+            possible_moves.append(0) # Up
 
-                
-            elif direction_vec[0] > 0 and direction_vec[1] < 0: # Down-Left
-                return choice(np.array([2, 3]), p=[0.5,0.5]) + radix_shift
-                
-                
-            elif direction_vec[0] < 0 and direction_vec[1] > 0: # Up-Right
-                return choice(np.array([0, 1]), p=[0.5,0.5]) + radix_shift
-                
-            else: # Up-Left
-                return choice(np.array([0, 3]), p=[0.5,0.5]) + radix_shift
+        # Determine horizontal move component
+        if col_dir > 0:
+            possible_moves.append(1) # Right
+        elif col_dir < 0:
+            possible_moves.append(3) # Left
+
+        # Convert to a numpy array for vectorized operations
+        possible_actions = np.array(possible_moves, dtype=int)
+
+        # Apply radix shift for the "push" action if adjacent
+        if players_are_adjacent:
+            possible_actions += 4
+            
+        return possible_actions
 
     def act(self, obs, env=None):
         """
@@ -184,18 +185,23 @@ class ManhattanAgent(Agent):
             else: # only coin2 is available
                 target_direction = coin2_pos - player_pos
 
-        # Compute the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
+        # Compute possible actions: the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
         # because the first 4 actions in the environment are the 'no push' moves.
-        return self.compute_action(target_direction, players_are_adjacent)
+        self.possible_actions = self.compute_possible_actions(target_direction, players_are_adjacent)
+        
+        # Choose one of the optimal actions uniformly at random.
+        # In case there is only one action, this just chooses the single action
+        return np.random.choice(self.possible_actions)
+        
     
 class ManhattanAgent_Passive(ManhattanAgent):
     """
     A Manhattan agent that never uses the push action.
     """
-    def compute_action(self, direction_vec, players_are_adjacent):
+    def compute_possible_actions(self, direction_vec, players_are_adjacent):
         # Call the parent's method but always with players_are_adjacent=False
         # This ensures the radix_shift is never applied.
-        return super().compute_action(direction_vec, False)
+        return super().compute_possible_actions(direction_vec, False)
     
 class ManhattanAgent_Aggressive(ManhattanAgent):
     """
@@ -248,9 +254,14 @@ class ManhattanAgent_Aggressive(ManhattanAgent):
         # Initialize target directional vector
         target_direction = target_loc[min_dist_idx] - player_pos
     
-        # Compute the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
+        # Compute possible actions: the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
         # because the first 4 actions in the environment are the 'no push' moves.
-        return self.compute_action(target_direction, players_are_adjacent)
+        self.possible_actions = self.compute_possible_actions(target_direction, players_are_adjacent)
+        
+        # Choose one of the optimal actions uniformly at random.
+        # In case there is only one action, this just chooses the single action
+        return np.random.choice(self.possible_actions)
+        
     
 class ManhattanAgent_Ultra_Aggressive(ManhattanAgent):
     """
@@ -311,9 +322,14 @@ class ManhattanAgent_Ultra_Aggressive(ManhattanAgent):
         # Initialize target directional vector
         target_direction = target_loc[min_dist_idx] - player_pos
     
-        # Compute the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
+        # Compute possible actions: the move action (0-3) = ("Up", "Right", "Down", "Left"). This index works for the combined action
         # because the first 4 actions in the environment are the 'no push' moves.
-        return self.compute_action(target_direction, players_are_adjacent)
+        self.possible_actions = self.compute_possible_actions(target_direction, players_are_adjacent)
+        
+        # Choose one of the optimal actions uniformly at random.
+        # In case there is only one action, this just chooses the single action
+        return np.random.choice(self.possible_actions)
+        
     
 
 ### ============ Q-learning agents ============ 
@@ -522,7 +538,7 @@ class LevelKQAgentSoftmax(LevelKQAgent):
         return softmax(expected_q_values, self.beta)
         
         
-### ============ Dynamic programming agents - value iteration ============
+### ============ Dynamic programming agents - online value iteration ============
 
 class LevelKDPAgent_Stationary(Agent):
     """
@@ -576,7 +592,7 @@ class LevelKDPAgent_Stationary(Agent):
         # Pre-calculate the state-independent execution probability tensor P(edm, eadv | idm, iadv)
         self.prob_exec_tensor = self._calculate_execution_probabilities(env)
 
-        # OPTIMIZATION: Pre-compute the full transition and reward models
+        # Pre-compute state and reward lookup tables
         # These tensors store the outcomes for every state and EXECUTED action pair.
         self.S_prime_lookup, self.R_lookup = self._precompute_lookups()
         
@@ -602,8 +618,8 @@ class LevelKDPAgent_Stationary(Agent):
 
     def _precompute_lookups(self):
         """
-        One-time, expensive computation to build the transition (s') and reward (r) models.
-        This maps (s, edm, eadv) -> (s', r) for all states and executed actions,
+        One-time, expensive computation to build lookup table that maps
+        (s, edm, eadv) -> (s', r) for all states and executed actions,
         eliminating the need for simulation in the main training loop.
         """
         if self.player_id == 0:
@@ -946,3 +962,141 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         
         # Call the parent's update method to handle the Bellman update and opponent model
         super().update(obs, actions, rewards, new_obs)
+        
+
+### ============ Dynamic programming agents - offline value iteration (perfect opponent model) ============
+
+class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
+    """
+    Computes the optimal policy (a best response) against a known, fixed opponent
+    policy using offline value iteration.
+
+    This agent inherits the efficient, vectorized model-handling and Bellman update
+    logic from LevelKDPAgent_Stationary and overrides the opponent model to be
+    a "perfect" (i.e., known and fixed) model of a ManhattanAgent.
+    """
+    def __init__(self, action_space, enemy_action_space, n_states, gamma, player_id, env, coin_location, grid_size):
+        # Initialize as a Level-1 DP Agent to leverage its pre-computation methods.
+        # We pass epsilon=0 because the final policy will be deterministic.
+        super().__init__(k=1, action_space=action_space, enemy_action_space=enemy_action_space,
+                         n_states=n_states, epsilon=0, gamma=gamma, player_id=player_id, env=env)
+
+        # Define the fixed opponent we are solving against.
+        self.enemy_agent = ManhattanAgent(action_space=self.enemy_action_space,
+                                          coin_location=coin_location,
+                                          grid_size=grid_size,
+                                          player_id=1 - self.player_id)
+
+        # 3. Pre-compute the opponent's full, fixed policy table.
+        print("Pre-computing the perfect opponent policy table...")
+        self.opponent_policy_table = self._precompute_opponent_policy()
+        print("Opponent policy table finished.")
+
+        # 4. The final optimal policy π*(s) will be stored here.
+        self.optim_policy_table = np.zeros(self.n_states, dtype=int)
+
+        # 5. Run offline value iteration to find the optimal value function V*(s, b)
+        # and then extract the final policy.
+        self.run_value_iteration()
+        self.extract_optimal_policy()
+
+    def _precompute_opponent_policy(self):
+        """Computes the opponent's action probability distribution for every state."""
+        policy_table = np.zeros((self.n_states, self.num_Adv_actions))
+        for s in range(self.n_states):
+            try:
+                # The act method of ManhattanAgent sets its `possible_actions` attribute.
+                self.enemy_agent.act(s, None)
+                possible_actions = self.enemy_agent.possible_actions
+
+                if possible_actions is not None and len(possible_actions) > 0:
+                    policy_table[s, possible_actions] = 1.0 / len(possible_actions)
+                else: # Handle cases where no specific action is determined (e.g., no coins left)
+                    policy_table[s, :] = 1.0 / self.num_Adv_actions # Assume uniform random
+            except (ValueError, IndexError): # Catch errors from invalid/unreachable states
+                policy_table[s, :] = 1.0 / self.num_Adv_actions
+        return policy_table
+
+    def get_opponent_policy(self, obs):
+        """
+        Overrides the parent method. Instead of learning, it returns the
+        pre-computed policy for the fixed opponent.
+        """
+        return self.opponent_policy_table[obs]
+
+    def run_value_iteration(self, theta=1e-2, max_iters=10000):
+        """
+        Performs offline, in-place (asynchronous) value iteration on the V(s, b) table
+        until convergence. This is more memory-efficient as it avoids copying the
+        large V matrix in each iteration.
+        """
+        print("Starting offline in-place value iteration on V(s, b)...")
+
+        for i in range(max_iters):
+            delta = 0  # Initialize max change for this sweep to zero
+
+            # Loop through all states to update their values
+            for s in range(self.n_states):
+                
+                # Get outcomes for the current state from the lookup tables
+                R_exec_obs = self.R_lookup[s, :, :]
+                S_prime_exec_obs = self.S_prime_lookup[s, :, :]
+                
+                # Calculate expected future values for all outcomes
+                future_V_values_executed = self._calculate_expected_future_values(S_prime_exec_obs)
+                
+                # Loop through all possible opponent actions `b`
+                for b_opp in range(self.num_Adv_actions):
+                    # Store the value of V(s, b_opp) before the update
+                    v_s_b_old = self.V[s, b_opp]
+                    
+                    # Extract transition probabilities conditioned on the opponent's TAKEN action
+                    prob_exec_tensor_fixed_b = self.prob_exec_tensor[:, b_opp, :, :]
+                    
+                    # Calculate expected rewards and future values for each of our INTENDED actions
+                    expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, R_exec_obs)
+                    expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, future_V_values_executed)
+                    
+                    Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
+                    # The new value is the max Q-value
+                    v_s_b_new = np.max(Q_values_for_dm_intentions)
+
+                    # --- Update V in-place and track the change ---
+                    self.V[s, b_opp] = v_s_b_new
+                    delta = max(delta, np.abs(v_s_b_new - v_s_b_old))
+
+            print(f"Iteration {i + 1}: Max V change = {delta}")
+            if delta < theta:
+                print(f"Value iteration converged after {i + 1} iterations.")
+                return
+
+        print(f"Value iteration did not converge after {max_iters} iterations.")
+
+
+    def extract_optimal_policy(self):
+        """
+        Extracts the optimal deterministic policy π*(s) after value iteration.
+        This reuses the parent's `optim_act` method.
+        """
+        print("Extracting optimal policy...")
+        for s in range(self.n_states):
+            # The parent's optim_act function finds the best action 'a' that maximizes
+            # the expected Q-value, marginalized over the opponent's policy at state 's'.
+            # This is exactly what we need for policy extraction.
+            self.optim_policy_table[s] = self.optim_act(s)
+        print("Optimal policy extracted.")
+
+    def act(self, obs, env=None):
+        """
+        Returns the pre-computed optimal action for the given state.
+        """
+        return self.optim_policy_table[obs]
+
+    def update(self, obs, actions, rewards, new_obs):
+        """
+        This agent is an offline solver. It does not learn during episodes.
+        """
+        pass
+        
+        
+        
