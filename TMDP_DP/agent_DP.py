@@ -8,6 +8,7 @@ import numpy as np
 from numpy.random import choice
 from itertools import product
 import copy
+from tqdm.notebook import tqdm
 
 def softmax(x, beta=1.0):
     x = x - np.max(x)  # stability
@@ -623,14 +624,14 @@ class LevelKDPAgent_Stationary(Agent):
         eliminating the need for simulation in the main training loop.
         """
         if self.player_id == 0:
-            print(f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (DM)... (this may take a moment)")
+            decs_str = f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (DM)... (this may take a moment)"
         else:
-            print(f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (Adv)... (this may take a moment)")
+            decs_str = f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (Adv)... (this may take a moment)"
         
         s_prime_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions), dtype=int)
         r_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions))
 
-        for s in range(self.n_states):
+        for s in tqdm(range(self.n_states), desc=decs_str):
             try:
                 self.reset_sim_env(s)
             except (IndexError, ValueError):
@@ -982,7 +983,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
                          n_states=n_states, epsilon=0, gamma=gamma, player_id=player_id, env=env)
 
         # Define the fixed opponent we are solving against.
-        self.enemy_agent = ManhattanAgent(action_space=self.enemy_action_space,
+        self.enemy_agent = ManhattanAgent_Ultra_Aggressive(action_space=self.enemy_action_space,
                                           coin_location=coin_location,
                                           grid_size=grid_size,
                                           player_id=1 - self.player_id)
@@ -1003,7 +1004,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
     def _precompute_opponent_policy(self):
         """Computes the opponent's action probability distribution for every state."""
         policy_table = np.zeros((self.n_states, self.num_Adv_actions))
-        for s in range(self.n_states):
+        for s in tqdm(range(self.n_states), desc="Pre-computing opponent policy table"):
             try:
                 # The act method of ManhattanAgent sets its `possible_actions` attribute.
                 self.enemy_agent.act(s, None)
@@ -1032,43 +1033,73 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         """
         print("Starting offline in-place value iteration on V(s, b)...")
 
-        for i in range(max_iters):
-            delta = 0  # Initialize max change for this sweep to zero
+        # Manually create a tqdm instance for fine-grained control in first
+        # We set the total to be the convergence threshold 'theta'.
+        # Updating the bar by how much we have *not* yet converged.
+        with tqdm(total=1.0, desc="Convergence Progress", unit='', 
+                bar_format='{l_bar}{bar:10}{r_bar}') as progress_bar:
+        
 
-            # Loop through all states to update their values
-            for s in range(self.n_states):
-                
-                # Get outcomes for the current state from the lookup tables
-                R_exec_obs = self.R_lookup[s, :, :]
-                S_prime_exec_obs = self.S_prime_lookup[s, :, :]
-                
-                # Calculate expected future values for all outcomes
-                future_V_values_executed = self._calculate_expected_future_values(S_prime_exec_obs)
-                
-                # Loop through all possible opponent actions `b`
-                for b_opp in range(self.num_Adv_actions):
-                    # Store the value of V(s, b_opp) before the update
-                    v_s_b_old = self.V[s, b_opp]
-                    
-                    # Extract transition probabilities conditioned on the opponent's TAKEN action
-                    prob_exec_tensor_fixed_b = self.prob_exec_tensor[:, b_opp, :, :]
-                    
-                    # Calculate expected rewards and future values for each of our INTENDED actions
-                    expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, R_exec_obs)
-                    expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, future_V_values_executed)
-                    
-                    Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
-                    # The new value is the max Q-value
-                    v_s_b_new = np.max(Q_values_for_dm_intentions)
+            for i in range(max_iters):
+                delta = 0  # Initialize max change for this sweep to zero
 
-                    # --- Update V in-place and track the change ---
-                    self.V[s, b_opp] = v_s_b_new
-                    delta = max(delta, np.abs(v_s_b_new - v_s_b_old))
+                # Loop through all states to update their values
+                for s in range(self.n_states):
+                    
+                    # Get outcomes for the current state from the lookup tables
+                    R_exec_obs = self.R_lookup[s, :, :]
+                    S_prime_exec_obs = self.S_prime_lookup[s, :, :]
+                    
+                    # Calculate expected future values for all outcomes
+                    future_V_values_executed = self._calculate_expected_future_values(S_prime_exec_obs)
+                    
+                    # Loop through all possible opponent actions `b`
+                    for b_opp in range(self.num_Adv_actions):
+                        
+                        # Store the value of V(s, b_opp) before the update
+                        v_s_b_old = self.V[s, b_opp]
+                        
+                        # Extract transition probabilities conditioned on the opponent's TAKEN action
+                        prob_exec_tensor_fixed_b = self.prob_exec_tensor[:, b_opp, :, :]
+                        
+                        # Calculate expected rewards and future values for each of our INTENDED actions
+                        expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, R_exec_obs)
+                        expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, future_V_values_executed)
+                        
+                        Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
+                        # The new value is the max Q-value
+                        v_s_b_new = np.max(Q_values_for_dm_intentions)
 
-            print(f"Iteration {i + 1}: Max V change = {delta}")
-            if delta < theta:
-                print(f"Value iteration converged after {i + 1} iterations.")
-                return
+                        # --- Update V in-place and track the change ---
+                        self.V[s, b_opp] = v_s_b_new
+                        delta = max(delta, np.abs(v_s_b_new - v_s_b_old))
+                        
+                # --- TQDM Update Logic ---
+                
+                # Calculate progress as a fraction from 0.0 to 1.0
+                # 0.0 means not converged at all (delta is large)
+                # 1.0 means fully converged (delta < theta)
+                # We clip the value between 0 and 1.
+                progress = max(0.0, 1.0 - (delta / theta))
+                
+                # Calculate the needed *increment* to update the bar.
+                # This is more robust than setting .n directly.
+                update_amount = progress - progress_bar.n
+                if update_amount > 0:
+                    progress_bar.update(update_amount)
+                
+                # Update the postfix to show the iteration and delta values.
+                # Postfix is generally better for stats than the description.
+                progress_bar.set_postfix(iter=i + 1, delta=f"{delta:.6f}", refresh=True)
+                
+                # --- Convergence Check ---
+                if delta < theta:
+                    # Ensure the bar is full upon completion.
+                    if progress_bar.n < 1.0:
+                        progress_bar.update(1.0 - progress_bar.n)
+                    
+                    print(f"\nValue iteration converged after {i + 1} iterations.")
+                    return
 
         print(f"Value iteration did not converge after {max_iters} iterations.")
 
