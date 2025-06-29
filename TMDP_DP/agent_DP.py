@@ -116,7 +116,10 @@ class ManhattanAgent(Agent):
         """
         possible_moves = []
         row_dir, col_dir = direction_vec[0], direction_vec[1]
-
+        
+        if row_dir == 0 and col_dir == 0:
+            possible_moves = [0,1,2,3]
+        
         # Determine vertical move component
         if row_dir > 0:
             possible_moves.append(2) # Down
@@ -396,7 +399,7 @@ class LevelKQAgent(Agent):
       level-(k-1) agent. It recursively builds a model of the opponent to 
       predict their actions.
     """
-    def __init__(self, k, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma):
+    def __init__(self, k, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, grid_size):
         if k < 1:
             raise ValueError("Level k must be a positive integer.")
             
@@ -409,9 +412,10 @@ class LevelKQAgent(Agent):
         self.epsilon = epsilon
         self.gamma = gamma
         self.enemy_action_space = enemy_action_space
+        self.grid_size = grid_size
 
         # Q-function Q(s, a, b), where a is self action, b is opponent action
-        self.Q = np.zeros([self.n_states, len(self.action_space), len(self.enemy_action_space)])
+        self.Q = self._setup_Q(-10)
 
         # --- Level-Specific Opponent Model Initialization ---
         self.enemy = None
@@ -429,8 +433,42 @@ class LevelKQAgent(Agent):
                 n_states=self.n_states,
                 learning_rate=self.alpha, # Using same parameters for the modeled enemy
                 epsilon=self.epsilon,
-                gamma=self.gamma
+                gamma=self.gamma,
+                grid_size=grid_size
             )
+            
+    def _setup_Q(self,initial_value):
+        """
+        Initalizing the value function. Setting the values of terminal states to 0.
+        """
+        
+        Q = np.ones([self.n_states, len(self.action_space), len(self.enemy_action_space)])*initial_value
+        
+        for s in tqdm(range(self.n_states), desc="Initializing value function."):
+            if self._is_terminal_state(s):
+                Q[s,:,:] = 0
+                
+        return Q
+
+    def _is_terminal_state(self, obs):
+        """
+        Checks if a given state observation is terminal (e.g., both coins are gone).
+        Returns True if the state is terminal, False otherwise.
+        """
+        # We can use the environment snapshot to get the grid parameters
+        _, base_coll = self.grid_size**2, 2
+        
+        state_copy = obs
+        c_r2 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_r1 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_b2 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_b1 = bool(state_copy % base_coll)
+
+        # The game is over if both coins have been collected by either player
+        coin1_gone = c_b1 or c_r1
+        coin2_gone = c_b2 or c_r2
+        
+        return coin1_gone and coin2_gone
 
     def get_opponent_policy(self, obs):
         """
@@ -477,13 +515,14 @@ class LevelKQAgent(Agent):
         a_dm, a_adv = actions
         r_dm, r_adv = rewards
 
-        # Update the internal opponent model (recursively if k > 1)
         if self.k > 1:
-            # Update the enemy model with its own perspective (actions and rewards swapped)
             self.enemy.update(obs, [a_adv, a_dm], [r_adv, r_dm], new_obs)
         else: # k == 1
-            # Update the Dirichlet count for the opponent's observed action
             self.Dir[obs, a_adv] += 1
+        
+        # If the state is terminal, no Bellman update should occur.
+        if self._is_terminal_state(obs):
+            return # Exit early
         
         # Calculate the value of the next state (max Q') for the Bellman update
         opponent_policy_new = self.get_opponent_policy(new_obs)
@@ -509,7 +548,7 @@ class LevelKQAgentSoftmax(LevelKQAgent):
     """
     def __init__(self, k, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, beta=1.0):
         # Call the parent constructor
-        super().__init__(k, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma)
+        super().__init__(k, action_space, enemy_action_space, n_states, learning_rate, epsilon, gamma, grid_size)
         self.beta = beta
 
         # IMPORTANT: Override the opponent model to also be a Softmax agent
@@ -563,9 +602,6 @@ class LevelKDPAgent_Stationary(Agent):
         self.gamma = gamma
         self.player_id = player_id
         self.enemy_action_space = enemy_action_space
-
-        # Value function V(s, b_opp), where b_opp is the opponent's action
-        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
         
         # --- Common Initialization for all levels ---
         
@@ -573,6 +609,9 @@ class LevelKDPAgent_Stationary(Agent):
         self.env_snapshot = copy.deepcopy(env)
         self.env_snapshot.blue_player_execution_prob = 1.0
         self.env_snapshot.red_player_execution_prob = 1.0
+        
+        # Value function V(s, b_opp), where b_opp is the opponent's action
+        self.V = self._setup_V(0)
         
         # Determine action spaces and details based on player_id
         if self.player_id == 0:
@@ -616,6 +655,39 @@ class LevelKDPAgent_Stationary(Agent):
                 player_id=1 - self.player_id,
                 env=env
             )
+            
+    def _setup_V(self,initial_value):
+        """
+        Initalizing the value function. Setting the values of terminal states to 0.
+        """
+        
+        V = np.ones([self.n_states, len(self.enemy_action_space)])*initial_value
+        
+        for s in tqdm(range(self.n_states), desc="Initializing value function."):
+            if self._is_terminal_state(s):
+                V[s,:] = 0
+                
+        return V
+            
+    def _is_terminal_state(self, obs):
+        """
+        Checks if a given state observation is terminal (e.g., both coins are gone).
+        Returns True if the state is terminal, False otherwise.
+        """
+        # We can use the environment snapshot to get the grid parameters
+        _, base_coll = self.env_snapshot.N**2, 2
+        
+        state_copy = obs
+        c_r2 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_r1 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_b2 = bool(state_copy % base_coll); state_copy //= base_coll
+        c_b1 = bool(state_copy % base_coll)
+
+        # The game is over if both coins have been collected by either player
+        coin1_gone = c_b1 or c_r1
+        coin2_gone = c_b2 or c_r2
+        
+        return coin1_gone and coin2_gone
 
     def _precompute_lookups(self):
         """
@@ -624,9 +696,9 @@ class LevelKDPAgent_Stationary(Agent):
         eliminating the need for simulation in the main training loop.
         """
         if self.player_id == 0:
-            decs_str = f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (DM)... (this may take a moment)"
+            decs_str = f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (DM)."
         else:
-            decs_str = f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (Adv)... (this may take a moment)"
+            decs_str = f"Pre-computing state and reward lookup tables for Level-{self.k} DP Agent (Adv)."
         
         s_prime_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions), dtype=int)
         r_lookup = np.zeros((self.n_states, self.num_DM_actions, self.num_Adv_actions))
@@ -744,12 +816,16 @@ class LevelKDPAgent_Stationary(Agent):
         """Updates the agent's value function V(s,b) and its internal opponent model."""
         # Determine opponent's observed action
         b_opp_taken_in_obs = actions[1] if self.player_id == 0 else actions[0]
-
+        
         # Update opponent model (recursively for k>1, or Dirichlet for k=1)
         if self.k > 1:
             self.enemy.update(obs, actions, rewards, new_obs)
         else:
             self.Dir[obs, b_opp_taken_in_obs] += 1
+        
+        # If terminal state is reached do not update the value  
+        if self._is_terminal_state(obs):
+            return
             
         # --- Vectorized V(obs, b_opp) Update ---
         
@@ -832,10 +908,13 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
         # Manually copy necessary parameter setup from the parent
         self.k, self.n_states, self.epsilon, self.gamma, self.player_id = k, n_states, epsilon, gamma, player_id
         self.enemy_action_space = enemy_action_space
-        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
+
         self.env_snapshot = copy.deepcopy(env)
         self.env_snapshot.blue_player_execution_prob = 1.0
         self.env_snapshot.red_player_execution_prob = 1.0
+        
+        self.V = self._setup_V(-1)
+        
         if self.player_id == 0:
             self.DM_action_details = self.env_snapshot.combined_actions_blue; self.Adv_action_details = self.env_snapshot.combined_actions_red
             self.num_DM_actions = len(env.combined_actions_blue); self.num_Adv_actions = len(env.combined_actions_red)
@@ -891,9 +970,12 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         # Manually copy necessary parameter setup
         self.k, self.n_states, self.epsilon, self.gamma, self.player_id = k, n_states, epsilon, gamma, player_id
         self.enemy_action_space = enemy_action_space
-        self.V = np.zeros([self.n_states, len(self.enemy_action_space)])
+        
         self.env_snapshot = copy.deepcopy(env)
         self.env_snapshot.blue_player_execution_prob = 1.0; self.env_snapshot.red_player_execution_prob = 1.0
+        
+        self.V = self._setup_V(-1)
+        
         if self.player_id == 0:
             self.DM_action_details = self.env_snapshot.combined_actions_blue; self.Adv_action_details = self.env_snapshot.combined_actions_red
             self.num_DM_actions = len(env.combined_actions_blue); self.num_Adv_actions = len(env.combined_actions_red)
@@ -976,30 +1058,28 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
     logic from LevelKDPAgent_Stationary and overrides the opponent model to be
     a "perfect" (i.e., known and fixed) model of a ManhattanAgent.
     """
-    def __init__(self, action_space, enemy_action_space, n_states, gamma, player_id, env, coin_location, grid_size):
+    def __init__(self, action_space, enemy_action_space, n_states, gamma, player_id, env, enemy):
         # Initialize as a Level-1 DP Agent to leverage its pre-computation methods.
         # We pass epsilon=0 because the final policy will be deterministic.
         super().__init__(k=1, action_space=action_space, enemy_action_space=enemy_action_space,
                          n_states=n_states, epsilon=0, gamma=gamma, player_id=player_id, env=env)
 
         # Define the fixed opponent we are solving against.
-        self.enemy_agent = ManhattanAgent_Ultra_Aggressive(action_space=self.enemy_action_space,
-                                          coin_location=coin_location,
-                                          grid_size=grid_size,
-                                          player_id=1 - self.player_id)
+        self.enemy = copy.deepcopy(enemy)
 
-        # 3. Pre-compute the opponent's full, fixed policy table.
+        # Pre-compute the opponent's full, fixed policy table.
         print("Pre-computing the perfect opponent policy table...")
         self.opponent_policy_table = self._precompute_opponent_policy()
         print("Opponent policy table finished.")
 
-        # 4. The final optimal policy π*(s) will be stored here.
+        # The final optimal policy π*(s) will be stored here.
         self.optim_policy_table = np.zeros(self.n_states, dtype=int)
 
-        # 5. Run offline value iteration to find the optimal value function V*(s, b)
+        # Run offline value iteration to find the optimal value function V*(s, b)
         # and then extract the final policy.
         self.run_value_iteration()
         self.extract_optimal_policy()
+        
 
     def _precompute_opponent_policy(self):
         """Computes the opponent's action probability distribution for every state."""
@@ -1007,8 +1087,8 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         for s in tqdm(range(self.n_states), desc="Pre-computing opponent policy table"):
             try:
                 # The act method of ManhattanAgent sets its `possible_actions` attribute.
-                self.enemy_agent.act(s, None)
-                possible_actions = self.enemy_agent.possible_actions
+                self.enemy.act(s, None)
+                possible_actions = self.enemy.possible_actions
 
                 if possible_actions is not None and len(possible_actions) > 0:
                     policy_table[s, possible_actions] = 1.0 / len(possible_actions)
@@ -1032,74 +1112,57 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         large V matrix in each iteration.
         """
         print("Starting offline in-place value iteration on V(s, b)...")
-
-        # Manually create a tqdm instance for fine-grained control in first
-        # We set the total to be the convergence threshold 'theta'.
-        # Updating the bar by how much we have *not* yet converged.
-        with tqdm(total=1.0, desc="Convergence Progress", unit='', 
-                bar_format='{l_bar}{bar:10}{r_bar}') as progress_bar:
         
+        progress_bar = tqdm(range(max_iters), desc="Value Iteration", unit="it")
+        
+        for i in progress_bar:
+            delta = 0  # Initialize max change for this sweep to zero
 
-            for i in range(max_iters):
-                delta = 0  # Initialize max change for this sweep to zero
+            # Loop through all states to update their values
+            for s in range(self.n_states):
+                
+                if self._is_terminal_state(s):
+                    continue  # Skip updates for terminal states, their value is 0
+                
+                # Get outcomes for the current state from the lookup tables
+                R_exec_obs = self.R_lookup[s, :, :]
+                S_prime_exec_obs = self.S_prime_lookup[s, :, :]
+                
+                # Calculate expected future values for all outcomes
+                future_V_values_executed = self._calculate_expected_future_values(S_prime_exec_obs)
+                
+                # Loop through all possible opponent actions `b`
+                for b_opp in range(self.num_Adv_actions):
+                    
+                    # Store the value of V(s, b_opp) before the update
+                    v_s_b_old = self.V[s, b_opp]
+                    
+                    # Extract transition probabilities conditioned on the opponent's TAKEN action
+                    prob_exec_tensor_fixed_b = self.prob_exec_tensor[:, b_opp, :, :]
+                    
+                    # Calculate expected rewards and future values for each of our INTENDED actions
+                    expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, R_exec_obs)
+                    expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, future_V_values_executed)
+                    
+                    Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
+                    # The new value is the max Q-value
+                    v_s_b_new = np.max(Q_values_for_dm_intentions)
 
-                # Loop through all states to update their values
-                for s in range(self.n_states):
+                    # --- Update V in-place and track the change ---
+                    self.V[s, b_opp] = v_s_b_new
+                    delta = max(delta, np.abs(v_s_b_new - v_s_b_old))
                     
-                    # Get outcomes for the current state from the lookup tables
-                    R_exec_obs = self.R_lookup[s, :, :]
-                    S_prime_exec_obs = self.S_prime_lookup[s, :, :]
-                    
-                    # Calculate expected future values for all outcomes
-                    future_V_values_executed = self._calculate_expected_future_values(S_prime_exec_obs)
-                    
-                    # Loop through all possible opponent actions `b`
-                    for b_opp in range(self.num_Adv_actions):
-                        
-                        # Store the value of V(s, b_opp) before the update
-                        v_s_b_old = self.V[s, b_opp]
-                        
-                        # Extract transition probabilities conditioned on the opponent's TAKEN action
-                        prob_exec_tensor_fixed_b = self.prob_exec_tensor[:, b_opp, :, :]
-                        
-                        # Calculate expected rewards and future values for each of our INTENDED actions
-                        expected_rewards_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, R_exec_obs)
-                        expected_future_V_all_idm = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_b, future_V_values_executed)
-                        
-                        Q_values_for_dm_intentions = expected_rewards_all_idm + self.gamma * expected_future_V_all_idm
-                        # The new value is the max Q-value
-                        v_s_b_new = np.max(Q_values_for_dm_intentions)
-
-                        # --- Update V in-place and track the change ---
-                        self.V[s, b_opp] = v_s_b_new
-                        delta = max(delta, np.abs(v_s_b_new - v_s_b_old))
-                        
-                # --- TQDM Update Logic ---
-                
-                # Calculate progress as a fraction from 0.0 to 1.0
-                # 0.0 means not converged at all (delta is large)
-                # 1.0 means fully converged (delta < theta)
-                # We clip the value between 0 and 1.
-                progress = max(0.0, 1.0 - (delta / theta))
-                
-                # Calculate the needed *increment* to update the bar.
-                # This is more robust than setting .n directly.
-                update_amount = progress - progress_bar.n
-                if update_amount > 0:
-                    progress_bar.update(update_amount)
-                
-                # Update the postfix to show the iteration and delta values.
-                # Postfix is generally better for stats than the description.
-                progress_bar.set_postfix(iter=i + 1, delta=f"{delta:.6f}", refresh=True)
-                
-                # --- Convergence Check ---
-                if delta < theta:
-                    # Ensure the bar is full upon completion.
-                    if progress_bar.n < 1.0:
-                        progress_bar.update(1.0 - progress_bar.n)
-                    
-                    print(f"\nValue iteration converged after {i + 1} iterations.")
-                    return
+            # --- TQDM Update Logic ---
+            # The progress bar updates automatically with each loop.
+            # We simply set the postfix to show the latest delta value.
+            progress_bar.set_postfix(delta=f"{delta:.6f}/{theta:.4f}", refresh=True)
+            
+            # --- Convergence Check ---
+            if delta < theta:
+                # When using tqdm as an iterator, a 'break' is sufficient.
+                # It will automatically close the bar and stop iterating.
+                print(f"\nValue iteration converged after {i + 1} iterations.")
+                return
 
         print(f"Value iteration did not converge after {max_iters} iterations.")
 

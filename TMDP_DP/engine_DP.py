@@ -273,12 +273,15 @@ class CoinGame():
             if new_red_position[0] < 0 or new_red_position[0] >= self.N or \
                 new_red_position[1] < 0 or new_red_position[1] >= self.N:
                 reward_red += out_of_boundry_penalty
-            
+        
+        new_blue_position = np.clip(new_blue_position, 0, self.N - 1)
+        new_red_position = np.clip(new_red_position, 0, self.N - 1)
+        
         # Check if agents did not end up on the same spot
         # Penilize both agents for this
         if not np.array_equal(new_blue_position, new_red_position):
-            self.blue_player = np.clip(new_blue_position, 0, self.N - 1)
-            self.red_player = np.clip(new_red_position, 0, self.N - 1)
+            self.blue_player = new_blue_position
+            self.red_player = new_red_position
         else: 
             reward_blue += -0.05
             reward_red += -0.05
