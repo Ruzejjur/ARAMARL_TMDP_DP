@@ -2,7 +2,7 @@
 This module implements several environments, i.e., the simulators in which agents will interact and learn.
 Any environment is characterized by the following two methods:
  * step : receives the actions taken by the agents, and returns the new state of the simulator and the rewards
-          perceived by each agent, amongst other things.
+ perceived by each agent, amongst other things.
  * reset : sets the simulator at the initial state.
 """
 
@@ -70,47 +70,49 @@ class AdvRw():
 
     def __init__(self, mode='friend', p=0.5):
         self._mode = mode
-
+        # adversary estimation of our action
+        self._policy = np.asarray([0.5, 0.5])
+        self._learning_rate = 0.25
         self._p = p  # probability for the neutral environment
 
-        if self._mode == 'friend':
-            self.reward_table_DM = np.array([[+50,-50],[-50,+50]])
-            self.reward_table_ADV = np.array([[+50,-50],[-50,+50]])
-        elif self._mode == 'adversary':
-            self.reward_table_DM = np.array([[+50,-50],[-50,+50]])
-            self.reward_table_ADV = np.array([[-50,+50],[+50,-50]])
-        else: 
-            raise ValueError('Invalid environment mode.')
-
-        # TODO: Redefine the rewards for nutral case using a table
-        # elif self._mode == 'neutral':
-        #     box = np.random.rand() < self._p
-        #     if int(box) == action_agent:
-        #         reward = +50
-        #     else:
-        #         reward = -50 
-    
-    def get_reward_table_DM(self):
-        return self.reward_table_DM
-    
-    def get_reward_table_ADV(self):
-        return self.reward_table_ADV
-    
     def reset(self):
         # self._policy = np.asarray([0.5, 0.5])
         return
 
-    def step(self, action_agent, action_adversary):
-        
-        reward_DM = self.reward_table_DM[action_agent, action_adversary]
-        reward_ADV = self.reward_table_ADV[action_agent, action_adversary]
-        
-        return None, (reward_DM, reward_ADV), True, None
-   
+    def step(self, action):
+
+        if self._mode == 'friend':
+            if np.argmax(self._policy) == action:
+                reward = +50
+            else:
+                reward = -50
+        elif self._mode == 'adversary':
+            if np.argmax(self._policy) == action:
+                reward = -50
+            else:
+                reward = +50
+        elif self._mode == 'neutral':
+            box = np.random.rand() < self._p
+            if int(box) == action:
+                reward = +50
+            else:
+                reward = -50
+
+        self._policy = (self._learning_rate * np.array([1.0-action, action])
+                        + (1.0-self._learning_rate) * self._policy)
+        self._policy /= np.sum(self._policy)
+
+        # print('---')
+        #print('r', reward)
+        #print('p', self._policy)
+        # print('---')
+
+        return None, (reward, -reward), True, None
+
 
 class AdvRw2():
     """
-    Friend or Foe modified to model adversary separately.
+    Friend or Foe modified to model adversary separately..
     """
 
     def __init__(self, max_steps, payout=50, batch_size=1):
@@ -531,7 +533,7 @@ class SimpleCoin():
 
 class CoinGame():
     """
-    Coin Game from LOLA paper, played id
+    Coin Game from LOLA paper, played over a NxN grid
     """
 
     def __init__(self, max_steps=5, batch_size=1, tabular=True):
@@ -539,7 +541,7 @@ class CoinGame():
         self.batch_size = batch_size
         self.available_actions = np.array([0, 1, 2, 3])  # four directions to move. Agents pick up coins by moving onto the position where the coin is located
         self.step_count = 0
-        self.N = 7
+        self.N = 5
         self.available_actions = np.array(
             [0, 1])
         self.available_actions_DM = np.array(
@@ -550,7 +552,6 @@ class CoinGame():
 
         self.blue_player = [1, 0]
         self.red_player = [1, 2]
-        
         if (np.random.rand() < 0.0):
             self.blue_coin = [0, 1]
             self.red_coin = [2, 1]

@@ -1,55 +1,126 @@
 import numpy as np
 from numpy.random import choice
 
-from .base import Agent
 from .utils import softmax
 
-class IndQLearningAgent(Agent):
+# --- Type Aliases for Readability ---
+State = int
+Action = int
+Reward = float
+Policy = np.ndarray
+QFunction = np.ndarray
+
+class IndQLearningAgent():
     """
-    A Q-learning agent that treats other players as part of the environment (independent Q-learning).
-    She represents Q-values in a tabular form, i.e., using a matrix Q.
-    Intended to use as a baseline
+    An independent Q-learning (IQL) agent.
+
+    This agent treats other players as a static part of the environment. It
+    learns a Q-function `Q(s, a)` that maps state-action pairs to expected
+    future rewards, ignoring the opponent's influence on the state dynamics.
+    It is intended to serve as a baseline.
+
+    Attributes:
+        n_states (int): The total number of states in the environment.
+        learning_rate (float): The learning rate (learning_rate) for Q-function updates.
+        epsilon (float): The exploration rate for the epsilon-greedy policy.
+        gamma (float): The discount factor for future rewards.
+        action_space (np.ndarray): The set of actions available to this agent.
+        Q (np.ndarray): The agent's Q-table, with shape (n_states, num_actions).
     """
 
-    def __init__(self, action_space, n_states, learning_rate, epsilon, gamma, opponent_action_space=None):
-        Agent.__init__(self, action_space)
+    def __init__(self, action_space: np.ndarray, n_states: int, learning_rate: float,
+                 epsilon: float, gamma: float):
 
         self.n_states = n_states
-        self.alpha = learning_rate
+        self.learning_rate = learning_rate
         self.epsilon = epsilon
         self.gamma = gamma
+        self.action_space = action_space
         
         # This is the Q-function Q(s, a)
         self.Q = -10*np.ones([self.n_states, len(self.action_space)])
 
-    def act(self, obs, env):
-        """An epsilon-greedy policy"""
+    def act(self, obs: State) -> Action:
+        """
+        Selects an action using an epsilon-greedy policy.
+
+        With probability epsilon, it chooses a random action. Otherwise, it
+        chooses the action with the highest Q-value for the current state.
+
+        Args:
+            obs (int): The current state observation.
+            env: The environment (not used in this agent).
+
+        Returns:
+            int: The chosen action.
+        """
         if np.random.rand() < self.epsilon:
             return choice(self.action_space)
         else:
             return self.action_space[np.argmax(self.Q[obs, :])]
 
-    def update(self, obs, actions, rewards, new_obs):
-        """The vanilla Q-learning update rule"""
-        a0, _ = actions
-        r0, _ = rewards
+    def update(self, obs: State, actions: tuple, rewards: tuple, new_obs: State):
+        """
+        Updates the Q-function using the vanilla Q-learning update rule.
 
-        self.Q[obs, a0] = (1 - self.alpha)*self.Q[obs, a0] + self.alpha*(r0 + self.gamma*np.max(self.Q[new_obs, :]))
+        The update rule is:
+        Q(s,a) <- (1-α)Q(s,a) + α(r + γ * max_a' Q(s',a'))
+
+        Args:
+            obs (int): The state before the action.
+            actions (list): A list [self_action, opponent_action].
+            rewards (list): A list [self_reward, opponent_reward].
+            new_obs (int): The state after the action.
+        """
+        self_action, _ = actions
+        self_reward, _ = rewards
+
+        self.Q[obs, self_action] = (1 - self.learning_rate)*self.Q[obs, self_action] + self.learning_rate*(self_reward + self.gamma*np.max(self.Q[new_obs, :]))
         
     
-    def update_epsilon(self, new_epsilon):
-        """Updating the epsilon for the whole hierarchy."""
-        
+    def update_epsilon(self, new_epsilon: float):
+        """
+        Updates the agent's exploration rate (epsilon).
+
+        Args:
+            new_epsilon (float): The new exploration rate.
+        """
         self.epsilon = new_epsilon
         
 class IndQLearningAgentSoftmax(IndQLearningAgent):
-    """ A vanilla Q-learning agent that applies softmax policy."""
+    """
+    An independent Q-learning agent that uses a softmax policy.
+
+    This agent inherits from `IndQLearningAgent` but overrides the action
+    selection method to choose actions probabilistically based on their
+    Q-values, rather than using an epsilon-greedy approach.
+
+    Attributes:
+        beta (float): The temperature parameter for the softmax calculation.
+                      Higher beta leads to more deterministic (greedy) actions.
+    """
     
-    def __init__(self, action_space, n_states, learning_rate, epsilon, gamma, opponent_action_space=None, beta=1):
-        IndQLearningAgent.__init__(self, action_space, n_states, learning_rate, epsilon, gamma, opponent_action_space)
+    def __init__(self, action_space: np.ndarray, n_states: int, learning_rate: float,
+                 epsilon: float, gamma: float, beta: float = 1.0):
+        # Call the parent constructor
+        super().__init__(action_space, n_states, learning_rate, epsilon, gamma)
         
         self.beta = beta
         
-    def act(self, obs, env):
-        
-        return choice(self.action_space, p=softmax(self.Q[obs,:],self.beta))
+    def act(self, obs: int, env=None) -> Action:
+        """
+        Selects an action using a softmax policy.
+
+        The probability of selecting each action is proportional to its
+        exponentiated Q-value, scaled by the temperature parameter beta.
+
+        Args:
+            obs (int): The current state observation.
+            env: The environment (not used in this agent).
+
+        Returns:
+            int: The chosen action.
+        """
+        # Calculate policy using softmax over Q-values and sample from it.
+        policy = softmax(self.Q[obs, :], self.beta)
+        return choice(self.action_space, p=policy)

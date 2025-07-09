@@ -1,7 +1,3 @@
-# --- Base Class ---
-# Make the abstract Agent class directly available
-from .base import Agent
-
 # --- Utility Functions ---
 # Expose helper functions if they are needed externally,
 # otherwise they can be imported within the modules themselves.
@@ -42,4 +38,4 @@ from .dp import (
 # Import the perfect model solver
 from .offline_solvers import DPAgent_PerfectModel
 
-print("Agents package successfully initialized.") # Optional: for debugging
+print("Agents package successfully initialized.")

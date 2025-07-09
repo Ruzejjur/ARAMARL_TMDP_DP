@@ -1,11 +1,8 @@
 import numpy as np
 from numpy.random import choice
 import copy
-from typing import Optional, Tuple, cast
+from typing import cast
 from tqdm.notebook import tqdm
-
-
-from .base import Agent
 
 # --- Type Aliases for Readability ---
 State = int
@@ -15,7 +12,7 @@ Policy = np.ndarray
 ValueFunction = np.ndarray
 ActionDetails = np.ndarray
 
-class _BaseLevelKDPAgent(Agent):
+class _BaseLevelKDPAgent():
     """
     Base class for Level-K Dynamic Programming agents.
 
@@ -25,27 +22,35 @@ class _BaseLevelKDPAgent(Agent):
     modeling logic.
 
     Attributes:
-        k (int): The cognitive level of the agent.
+        k (int): The cognitive level of the agent. A Level-k agent models its
+                 opponent as a Level-(k-1) agent.
         n_states (int): The total number of states in the environment.
-        epsilon (float): The initial exploration rate for epsilon-greedy policies.
+        epsilon (float): The exploration rate for epsilon-greedy policies.
         gamma (float): The discount factor for future rewards.
-        player_id (int): The agent's ID (0 or 1).
+        player_id (int): The agent's identifier (0 for Blue, 1 for Red).
+        action_space (np.ndarray): The set of actions available to this agent.
         opponent_action_space (np.ndarray): The set of actions available to the opponent.
-        env_snapshot (CoinGame): A deep copy of the environment for deterministic simulation.
-        V (ValueFunction): The agent's value function table, V(s, b), where b is the opponent's action.
-        s_prime_lookup (np.ndarray): Pre-computed table mapping (s, a_self_executed, a_opp_executed) -> s'.
-        r_lookup (np.ndarray): Pre-computed table mapping (s, a_self_executed, a_opp_executed) -> r.
-        self_action_details (ActionDetails): Details of the agent's combined (move, push) actions.
-        opponent_action_details (ActionDetails): Details of the opponent's combined (move, push) actions.
+        env_snapshot (CoinGame): A deep copy of the environment, set to be deterministic.
+                                 Used for simulating outcomes to build the model.
+        V (ValueFunction): The agent's value function table, representing
+                           V(s, b), where 's' is the state and 'b' is the opponent's action.
+        s_prime_lookup (np.ndarray): A pre-computed table mapping
+                                     (s, a_self_executed, a_opp_executed) -> s'.
+        r_lookup (np.ndarray): A pre-computed table mapping
+                              (s, a_self_executed, a_opp_executed) -> r.
+        self_action_details (ActionDetails): Details (move, push) of the agent's
+                                             combined actions.
+        opponent_action_details (ActionDetails): Details (move, push) of the
+                                                 opponent's combined actions.
         num_self_actions (int): The number of actions available to this agent.
         num_opponent_actions (int): The number of actions available to the opponent.
-        opponent (Optional[Agent]): The agent's internal model of its opponent.
-        dirichlet_counts (Optional[np.ndarray]): Dirichlet counts for modeling policy of a Level-0 opponent.
+        opponent (object): The agent's internal model of its opponent. This is
+                           defined and initialized in subclasses.
+        dirichlet_counts (np.ndarray): Dirichlet counts for modeling a Level-0
+                                       opponent's policy. Initialized in subclasses that require it (k=1).
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
                  n_states: int, epsilon: float, gamma: float, player_id: int, env):
-        
-        super().__init__(action_space)
         
         # --- Core Agent Parameters ---
         self.k = k
@@ -53,10 +58,13 @@ class _BaseLevelKDPAgent(Agent):
         self.epsilon = epsilon
         self.gamma = gamma
         self.player_id = player_id
+        self.action_space = action_space
         self.opponent_action_space = opponent_action_space
         
         # --- Environment Snapshot for Model Computation ---
-        # Create a deterministic copy of the environment for simulation.
+        # Create a deterministic copy of the environment. This allows
+        # simulation of the outcome of any action pair from any state without
+        # affecting the actual game environment.
         self.env_snapshot = copy.deepcopy(env)
         self.env_snapshot.blue_player_execution_prob = 1.0
         self.env_snapshot.red_player_execution_prob = 1.0
@@ -79,32 +87,41 @@ class _BaseLevelKDPAgent(Agent):
             self.opponent_available_move_actions_num = len(env.available_move_actions_DM)
             
         # --- Value Function and Model Initialization ---
-        # V(s, opponent_action), where opponent_action is the opponent's selected action.
+        # V(s, opponent_action): The value of being in state 's' *after* 
+        # the opponent has committed to taking 'opponent_action'.
         self.V = self._setup_value_function(0)
             
         # Pre-compute (s, a_self_executed, a_opp_executed) -> (s', r) lookup tables.
-        # These tensors store the outcomes for every state and EXECUTED action pair.
+        # These tensors store the outcomes for every state and *executed* action pair
+        # mapped to resulting s'. 
         self.s_prime_lookup, self.r_lookup  = self._precompute_lookups()
         
         # --- Opponent Model Initialization (handled by subclasses) ---
-        self.opponent: Optional[Agent] = None
-        self.dirichlet_counts: Optional[np.ndarray] = None
+        self.opponent = None
+        self.dirichlet_counts = None
+        
+        # --- Probability of action execution tensor (handled by subclasses) ---
+        self.prob_exec_tensor = None
+        
         
     def _setup_value_function(self, initial_value: float) -> ValueFunction:
-        """Initializes the value function V(s, opponent_action).
-        
-        Sets the value of all terminal states to 0.
+        """
+        Initializes the value function V(s, opponent_action).
+
+        The value of all terminal states is set to 0, as no further rewards
+        can be obtained from them.
 
         Args:
-            initial_value (float): The initial value for non-terminal states.
+            initial_value (float): The initial value for all non-terminal states.
 
         Returns:
-            np.ndarray: The initialized value function table.
+            np.ndarray: The initialized value function table of shape
+                        (n_states, num_opponent_actions).
         """
         
         V = np.ones([self.n_states, len(self.opponent_action_space)])*initial_value
         
-        # tqdm shows progress during this potentially long setup.
+        # tqdm shows progress bar.
         for s in tqdm(range(self.n_states), desc="Initializing value function."):
             if self._is_terminal_state(s):
                 V[s,:] = 0
@@ -112,15 +129,19 @@ class _BaseLevelKDPAgent(Agent):
         return V
             
     def _is_terminal_state(self, obs:State) -> bool:
-        """Checks if a given state is terminal (i.e., both coins are collected).
-        
-        Note: This logic is coupled to the environment's state encoding.
-        A future refactor could move this into the environment class itself.
         """
-        # We can use the environment snapshot to get the grid parameters
+        Checks if a given state is terminal.
+
+        A state is terminal if either player has collected both of their coins
+        (a win) or if all four coins have been claimed by any combination of
+        players (a draw or a win). This logic is coupled to the environment's
+        specific state encoding scheme.
+        """
+        
+        # Grid size N, base for coin collection status
         _, base_coll = self.env_snapshot.N**2, 2
         
-        # Implement radix decoding of state only for coins
+        # Radix decoding of the state integer to get coin collection status
         state_copy = obs
         c_r2 = bool(state_copy % base_coll)
         state_copy //= base_coll
@@ -138,23 +159,23 @@ class _BaseLevelKDPAgent(Agent):
         coins_gone = (c_b1 or c_r1) and (c_b2 or c_r2)
         is_draw = coins_gone and not blue_wins and not red_wins
         
-        # A state is terminal if a player has won or if it's a draw.
-        # The max_steps condition cannot be encoded in the state, so the DP agent
-        # cannot account for it, which is a limitation of this state representation.
+        # NOTE: The DP agent cannot account for the episode ending due to max_steps,
+        # as this is not encoded in the state itself. This is a known limitation.
         return blue_wins or red_wins or is_draw
 
-    def _precompute_lookups(self) -> Tuple[np.ndarray, np.ndarray]:
+    def _precompute_lookups(self) -> tuple:
         """
         Builds lookup tables for next states (s') and rewards (r).
         
         This is a one-time, expensive computation that maps every
         (state, executed_action_self, executed_action_opponent) tuple
-        to its deterministic outcome, avoiding repeated simulation calls
-        during training.
+        to its deterministic outcome. This avoids repeated simulation calls
+        during the learning process, significantly speeding up calculations.
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]: A tuple containing the 
-            s_prime_lookup and r_lookup tables.
+            A tuple containing:
+            - s_prime_lookup (np.ndarray): Table of next states.
+            - r_lookup (np.ndarray): Table of rewards for the current agent.
         """
         
         desc_str = f"Pre-computing lookups for Level-{self.k} DP Agent (Player {"DM" if self.player_id == 0 else "Adv"})"
@@ -164,41 +185,47 @@ class _BaseLevelKDPAgent(Agent):
 
         for s in tqdm(range(self.n_states), desc=desc_str):
             try:
+                # Set the deterministic simulation environment to state 's'
                 self._reset_sim_env_to_state(s)
             except (IndexError, ValueError):
                 continue # Skip unreachable/invalid states
-
+            
             for a_self_exec in range(self.num_self_actions):
                 for a_opp_exec in range(self.num_opponent_actions):
-                    # Save state before stepping
+                    # Save the environment's state to restore it after the step
                     current_env_state = self.env_snapshot.get_state()
                     
-                    # Create the action pair in the correct [blue, red] order for the engine
-                    if self.player_id == 0: # I am the Blue Player (DM)
+                    # The environment engine expects actions in [blue, red] order.
+                    if self.player_id == 0: # I am the Blue Player
                         action_pair = (a_self_exec, a_opp_exec)
-                    else: # I am the Red Player (Adv)
+                    else: # I am the Red Player
                         action_pair = (a_opp_exec, a_self_exec)
 
-                    # Simulate one step with the correctly ordered action pair
+                    # Simulate one step with the specified executed action pair
                     s_prime, rewards_vec, _ = self.env_snapshot.step(action_pair)
                     
-                    # Store the resulting state and reward
+                    # Store the resulting next state and the reward for this agent
                     s_prime_lookup[s, a_self_exec, a_opp_exec] = s_prime
                     r_lookup[s, a_self_exec, a_opp_exec] = rewards_vec[self.player_id]
                     
-                    # Restore environment to the original state for the next action pair
+                    # Restore environment to its original state for the next action pair
                     self._reset_sim_env_to_state(current_env_state)
                     
         return s_prime_lookup, r_lookup
     
     def _reset_sim_env_to_state(self, obs: State):
-        """Resets the internal simulation environment to a specific state."""
+        """
+        Resets the internal simulation environment to a specific state index.
+        This involves decoding the integer state into player positions and
+        coin collection statuses.
+        """
         
         self.env_snapshot.reset()
+        # Grid size N, base for coin collection status
         base_pos, base_coll = self.env_snapshot.N**2, 2
         state_copy = obs
         
-        # Radix decode the state
+        # Radix decode the state integer to get all environment components
         c_r2 = bool(state_copy % base_coll)
         state_copy //= base_coll
         c_r1 = bool(state_copy % base_coll)
@@ -207,19 +234,27 @@ class _BaseLevelKDPAgent(Agent):
         state_copy //= base_coll
         c_b1 = bool(state_copy % base_coll)
         state_copy //= base_coll
-        p2_flat = state_copy % base_pos
+        red_player_flat_pos = state_copy % base_pos
         state_copy //= base_pos
-        p1_flat = state_copy
+        blue_player_flat_pos = state_copy
         
-        self.env_snapshot.blue_player = np.array([p1_flat % self.env_snapshot.N, p1_flat // self.env_snapshot.N])
-        self.env_snapshot.red_player = np.array([p2_flat % self.env_snapshot.N, p2_flat // self.env_snapshot.N])
+        # Set the simulation environment's attributes to match the decoded state
+        self.env_snapshot.blue_player = np.array([blue_player_flat_pos % self.env_snapshot.N, blue_player_flat_pos // self.env_snapshot.N])
+        self.env_snapshot.red_player = np.array([red_player_flat_pos % self.env_snapshot.N, red_player_flat_pos // self.env_snapshot.N])
         self.env_snapshot.blue_collected_coin1, self.env_snapshot.blue_collected_coin2 = c_b1, c_b2
         self.env_snapshot.red_collected_coin1, self.env_snapshot.red_collected_coin2 = c_r1, c_r2
         self.env_snapshot.coin1_available = not (c_b1 or c_r1)
         self.env_snapshot.coin2_available = not (c_b2 or c_r2)
     
     def update_epsilon(self, new_epsilon: float):
-        """Updates the exploration rate for this agent and its recursive opponent model."""
+        """
+        Updates the exploration rate for this agent and its recursive opponent model.
+        This ensures that if the exploration schedule changes, the change
+        propagates down the entire cognitive hierarchy.
+        
+        Args:
+            new_epsilon (float): The new exploration rate.
+        """
         
         self.epsilon = new_epsilon
         if self.k > 1 and self.opponent:
@@ -229,9 +264,13 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
     """
     A Level-K DP agent that assumes a stationary environment.
 
-    This agent pre-computes a fixed transition probability tensor based on the
-    environment's initial action execution probabilities. It models its opponent
-    recursively as a Level-(k-1) stationary agent.
+    "Stationary" means the probabilities of an action succeeding or failing
+    are fixed and do not depend on the current state. This agent pre-computes
+    a single, state-independent transition probability tensor. It models its
+    opponent recursively as a Level-(k-1) stationary agent.
+
+    - A Level-1 agent models its opponent as Level-0 (uniformly random policy).
+    - A Level-k agent (k>1) models its opponent as a Level-(k-1) agent.
     """
 
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
@@ -243,15 +282,19 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         super().__init__(k, action_space, opponent_action_space, n_states, 
                          epsilon, gamma, player_id, env)
         
-        # Pre-calculate the state-independent execution probability tensor P(a_self_exec, a_opp_exec | intended_action_self, intended_action_opp)
+        # Pre-calculate the state-independent execution probability tensor:
+        # P(a_self_exec, a_opp_exec | a_self_intend, a_opp_intend)
         self.prob_exec_tensor = self._calculate_execution_probabilities(env)
         
         # --- Opponent Model Initialization ---
         if self.k == 1:
-            # Base Case (k=1): Model opponent as Level-0 (random) using Dirichlet counts.
+            # Base Case (k=1): Model opponent as Level-0 (random policy).
+            # We use Dirichlet counts to learn this policy from observations.
+            # Initially, we assume a uniform prior.
             self.dirichlet_counts = np.ones((self.n_states, len(self.opponent_action_space)))
         elif self.k > 1:
-            # Recursive Step (k>1): Opponent is a Level-(k-1) version of this same class.
+            # Recursive Step (k>1): The opponent is a Level-(k-1) version of this
+            # same class, with the player roles reversed.
             self.opponent = self.__class__( 
                 k=self.k - 1,
                 action_space=self.opponent_action_space,
@@ -265,159 +308,217 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
             
     def get_opponent_policy(self, obs: State) -> Policy:
         """
-        Estimates the opponent's policy (probability distribution over actions) for a given state.
+        Estimates the opponent's policy (action probabilities) for a given state.
+
+        - For a k=1 agent, this is derived from the learned Dirichlet counts,
+          approximating a random (Level-0) opponent.
+        - For a k>1 agent, this is the epsilon-greedy policy of its internal
+          Level-(k-1) opponent model.
+          
+        Args:
+            obs: The current state.
+
+        Returns:
+            np.ndarray: A probability distribution over the opponent's actions.
         """
         
-        # Level-1 models opponent policy from Dirichlet counts
+        # --- Level-1 Agent: Opponent is Level-0 (Learned Random Policy) ---
         if self.k == 1:
             # Check if atributes is still initalized to None
             assert self.dirichlet_counts is not None, "dirichlet_counts should be initialized for a Level-1 agent."
             
+            # Normalize the counts for the given state to get a probability distribution.
             dir_sum = np.sum(self.dirichlet_counts[obs])
             if dir_sum == 0:
-                # Return a uniform policy if the state has not been seen
+                # Handle intialization of dirichlet_counts to 0
                 return np.ones(self.num_opponent_actions) / self.num_opponent_actions
             return self.dirichlet_counts[obs] / dir_sum
-        else: # k > 1
+        
+        # --- Level-k > 1 Agent: Opponent is Level-(k-1) ---
+        else:
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
-            
-            # Level-k recursively asks its internal Level-(k-1) model for its policy
-            opponent_model = cast(LevelKDPAgent_Stationary, self.opponent)
-            opponent_opt_act = opponent_model.optim_act(obs)
-            
-            opponent_policy = np.zeros(self.num_opponent_actions)
-            
-            if self.num_opponent_actions > 1:
-                
-                # Construct an epsilon-greedy policy for the opponent
-                
-                prob_non_optimal = self.epsilon / self.num_opponent_actions
-                opponent_policy[:] = prob_non_optimal
-                opponent_policy[opponent_opt_act] += 1.0 - self.epsilon
-            else:
-                opponent_policy[opponent_opt_act] = 1.0
-            return opponent_policy
+             
+            return self.opponent.get_policy(obs)
             
     def _calculate_expected_future_values(self, s_prime_array: np.ndarray) -> np.ndarray:
         """
-        Efficiently calculates E_{p(b'|s')}[V(s', b')] for an array of next states.
+        Efficiently calculates the expected future value for an array of next states.
+
+        For each next state s', it computes E_{p(b'|s')}[V(s', b')], which is the
+        value of s' averaged over the opponent's next action b'. This uses an
+        optimization to only compute the value for unique next states.
+
+        Args:
+            s_prime_array: An array of potential next states (s').
+
+        Returns:
+            An array of the same shape as s_prime_array, containing the
+            calculated expected future values.
         """
         # Find unique next states to avoid redundant calculations
         unique_s_primes, inverse_indices = np.unique(s_prime_array, return_inverse=True)
         
-        # Calculate the expected value for each unique next state
+        # Calculate the expected value V(s') for each unique next state s'.
+        # V(s') = sum over b' [ p(b'|s') * V(s', b') ]
         expected_V_map = {
             s_prime: np.dot(self.V[s_prime, :], self.get_opponent_policy(s_prime))
             for s_prime in unique_s_primes
         }
         
-        # Map the computed values back to the original array shape using the inverse indices
+        # Map the computed values back to the original array shape
         expected_V_flat = np.array([expected_V_map.get(s, 0) for s in unique_s_primes])
         return expected_V_flat[inverse_indices].reshape(s_prime_array.shape)
 
     def optim_act(self, obs: State) -> Action:
-        """Selects the optimal action based on the pre-computed model using vectorized operations."""
-        # Get outcomes for the current state from the pre-computed lookup tables
+        """
+        Selects the optimal action by calculating the Q-value for each of the
+        agent's actions and choosing the best one. This is done using efficient
+        vectorized operations.
+        """
+        # Get pre-computed outcomes (next states and rewards) for all executed
+        # action pairs from the current state 'obs'.
         rewards_executed = self.r_lookup[obs, :, :]
         s_primes_executed = self.s_prime_lookup[obs, :, :]
         
-        # Calculate expected future values for all possible executed outcomes
+        # Calculate the expected future values for all possible next states.
         future_V_executed = self._calculate_expected_future_values(s_primes_executed)
 
-        # Expected immediate rewards for each INTENDED action pair, averaged over execution stochasticity.
-        # einsum computes the dot product over the last two axes (executed actions).
+        # Using the transition model, calculate the expected reward for each
+        # *intended* action pair by marginalizing over the *executed* outcomes.
+        # 'ijkl,kl->ij' sums over the last two axes (executed actions).
         expected_self_rewards_intended = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, rewards_executed)
         
-        # Expected future values for each INTENDED action pair.
+        # Similarly, calculate the expected future value for each *intended* action pair.
         weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, future_V_executed)
         
-        # Get opponent's predicted policy for the current state
+        # Get the opponent's predicted policy (action probabilities) for the current state.
         opponent_policy_in_obs = self.get_opponent_policy(obs)
         
-        # Calculate total value for each of our actions, marginalized over the opponent's policy
+        # Calculate the total Q-value for each of our actions by marginalizing
+        # over the opponent's predicted policy.
+        # Q(s, a) = E_{b~pi_opp}[ R(s,a,b) + gamma * V(s') ]
         total_action_values = np.dot(expected_self_rewards_intended, opponent_policy_in_obs) + \
                               self.gamma * np.dot(weighted_sum_future_V, opponent_policy_in_obs)
         
-        # Choose the best action, breaking ties randomly
+        # Choose the best action, breaking ties randomly.
         max_indices = np.flatnonzero(total_action_values == np.max(total_action_values))
         return np.random.choice(max_indices)
         
     def get_policy(self, obs: State) -> Policy:
-        """Calculates this agent's own epsilon-greedy policy distribution."""
+        """
+        Calculates agent's own epsilon-greedy policy distribution for a
+        given state.
         
-        # Calculate optimal action in state obs
+        Args:
+            obs: The current state.
+
+        Returns:
+            np.ndarray: A probability distribution over the agent's actions.
+        """
+        
         optimal_action_idx = self.optim_act(obs)
         num_actions = len(self.action_space)
         
+        # Assign base exploration probability to all actions.
         policy = np.full(num_actions, self.epsilon / num_actions)
+        # Add the exploitation probability to the optimal action.
         policy[optimal_action_idx] += 1.0 - self.epsilon
-        return policy / np.sum(policy)
+        
+        return policy / np.sum(policy) # Normalize to ensure it's a valid distribution
 
     def act(self, obs:State, env=None) -> Action:
-        """Selects an action based on the epsilon-greedy policy."""
+        """
+        Selects an action based on the epsilon-greedy policy.
+        """
         policy = self.get_policy(obs)
         return choice(self.action_space, p=policy)
 
-    def update(self, obs: State, actions: list[Action], 
-               rewards, new_obs: State):
-        """Updates the agent's value function V(s,b) and its internal opponent model."""
+    def update(self, obs: State, actions: list[Action], new_obs: State):
+        """
+        Updates the agent's value function V(s,b) and its internal opponent model
+        based on a single transition (s, a, b, s').
         
-        # Determine opponent's observed action
+        Args:
+            obs: The current state.
+            actions: list of agents and opponents actions in state obs
+            new_obs: The next state after transition.
+        """
+        
+        # Determine which action the opponent took from the action pair.
         opponent_action_taken = actions[1] if self.player_id == 0 else actions[0]
         
-        # Update opponent model (recursively for k>1, or Dirichlet for k=1)
+         # --- Update Opponent Model ---
         if self.k > 1:
+            # If k>1, recursively call update on the internal Level-(k-1) model
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
-            self.opponent.update(obs, actions, rewards, new_obs)
+            self.opponent.update(obs, actions, new_obs)
         else:
+            # If k=1, update the Dirichlet counts for the observed opponent action.
             assert self.dirichlet_counts is not None, "dirichlet_counts should be initialized for a Level-1 agent."
             self.dirichlet_counts[obs, opponent_action_taken] += 1
         
-        # If terminal state is reached do not update the value  
+        # If the state was already terminal, its value is fixed at 0, so no update needed.
         if self._is_terminal_state(obs):
             return
             
-        # --- Vectorized V(obs, opponent_action) Update ---
+        # --- Vectorized V(obs, opponent_action_taken) Update ---
         
-        # Get outcomes for the current state from the lookup tables
+        # Get outcomes from the lookup tables for the current state.
         rewards_executed = self.r_lookup[obs, :, :]
         s_primes_executed = self.s_prime_lookup[obs, :, :]
         
-        # Calculate expected future values for all outcomes
+         # Calculate expected future values for all possible resulting states.
         future_V_executed = self._calculate_expected_future_values(s_primes_executed)
         
-        # Extract transition probabilities conditioned on the opponent's TAKEN action
+        # Get the transition probabilities, conditioned on the opponents action.
+        # NOTE: This is different from opponents resulting movement. It represents opponents *INDENDET* action.
         prob_exec_tensor_fixed_opp_action = self.prob_exec_tensor[:, opponent_action_taken, :, :]
         
-        # Calculate expected rewards and future values for each of our INTENDED actions
+        # Calculate the Q-values for each of our actions 'a', given s and opponent action 'b'.
+        # Q(s, a) = E_{b~pi_opp}[ R(s,a,b) + gamma * V(s') ]
         expected_rewards_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, rewards_executed)
         expected_future_V_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, future_V_executed)
         
-        # Bellman update for the value function
+        # The Bellman update: V(s, b) is the max Q-value over agent's actions.
         q_values_for_actions = expected_rewards_per_action + self.gamma * expected_future_V_per_action
         self.V[obs, opponent_action_taken] = np.max(q_values_for_actions)
         
     def _calculate_execution_probabilities(self, env) -> np.ndarray:
-        """Calculates the state-independent transition tensor P(executed | intended)."""
+        """
+        Calculates the state-independent transition tensor P(executed | intended).
+
+        This 4D tensor gives the probability of a specific pair of *executed*
+        actions (a_self_exec, a_opp_exec) occurring, given a pair of *intended*
+        actions (a_self_intend, a_opp_intend).
+
+        Returns:
+            A 4D np.ndarray with dimensions corresponding to:
+            (intended_self, intended_opp, executed_self, executed_opp)
+        """
         
-        if self.player_id == 0:
+        if self.player_id == 0: # This agent is the Blue Player
             self_exec_prob, opp_exec_prob = env.blue_player_execution_prob, env.red_player_execution_prob
-        else:
+        else: # This agent is the Red Player
             self_exec_prob, opp_exec_prob = env.red_player_execution_prob, env.blue_player_execution_prob
         
         # Extract move and push actions from the detailes
         self_moves, self_pushes = self.self_action_details[:, 0], self.self_action_details[:, 1]
         opp_moves, opp_pushes = self.opponent_action_details[:, 0], self.opponent_action_details[:, 1]
 
-        # Probability of our executed move given our intended move.
+        # --- Calculate P(a_self_exec | a_self_intend) ---
         prob_self = np.zeros((self.num_self_actions, self.num_self_actions))
+        # Broadcasting `[:, None]` allows comparing every element to every other element.
         move_match = (self_moves[:, None] == self_moves[None, :])
         push_match = (self_pushes[:, None] == self_pushes[None, :])
+        # If intended and executed actions match (both move and push), prob is `self_exec_prob`.
         prob_self[move_match & push_match] = self_exec_prob
         if self.self_available_move_actions_num > 1:
+            # If move differs but push matches, it's a failed move. The probability
+            # is distributed uniformly among all other possible moves.
+            # NOTE: Push is deterministic so the probabilities of push not matching stays 0
             prob_self[~move_match & push_match] = (1.0 - self_exec_prob) / (self.self_available_move_actions_num - 1)
         
-        # Probability of opponent's executed move given their intended move.
+        # --- Calculate P(a_opp_exec | a_opp_intend) ---
         prob_opp = np.zeros((self.num_opponent_actions, self.num_opponent_actions))
         move_match = (opp_moves[:, None] == opp_moves[None, :])
         push_match = (opp_pushes[:, None] == opp_pushes[None, :])
@@ -425,29 +526,39 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         if self.opponent_available_move_actions_num > 1:
             prob_opp[~move_match & push_match] = (1.0 - opp_exec_prob) / (self.opponent_available_move_actions_num - 1)
             
-        # Combine into a 4D tensor: P(a_self_exec, a_opp_exec | a_self_intend, a_opp_intend)
-        # using the outer product.
+        # --- Combine into the 4D tensor ---
+        # Using outer product via broadcasting to combine the two probability matrices.
+        # P(a_s_exec, a_o_exec | a_s_int, a_o_int) = P(a_s_exec | a_s_int) * P(a_o_exec | a_o_int)
         return prob_self[:, np.newaxis, :, np.newaxis] * prob_opp[np.newaxis, :, np.newaxis, :]
 
 
 class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
     """
-    A Level-K DP agent for non-stationary environments where action probabilities can change.
+    A Level-K DP agent for non-stationary environments.
+
+    This agent is designed for environments where the action execution
+    probabilities (e.g., `env.blue_player_execution_prob`) can change over time.
+    It adapts by recalculating the transition probability tensor before every
+    action selection.
     
-    This agent recalculates the execution probability tensor before every action selection,
-    making it adaptable to environments with dynamic transition stochasticity.
+    Attributes: 
+        Check parent
     """
-    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, n_states: int, epsilon: float, gamma: float, player_id: int, env):
+    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
+                 n_states: int, epsilon: float, gamma: float, player_id: int, env):
         
-        # Initializes everything except the opponent model from the base class.
+        # Call the parent class constructor to handle all common setup.
         super().__init__(k, action_space, opponent_action_space, n_states, epsilon, gamma, player_id, env)
 
-        self.prob_exec_tensor = self._calculate_execution_probabilities(env) # Initial calculation
-
-        # Initalize k-level hierarchy
+        # Initialize the k-level cognitive hierarchy with NonStationary agents.
         if self.k == 1:
+            # Base Case (k=1): Model opponent as Level-0 (random policy).
+            # We use Dirichlet counts to learn this policy from observations.
+            # Initially, we assume a uniform prior.
             self.dirichlet_counts = np.ones((self.n_states, len(self.opponent_action_space)))
         elif self.k > 1:
+            # Recursive Step (k>1): The opponent is a Level-(k-1) version of this
+            # same class, with the player roles reversed.
             self.opponent = LevelKDPAgent_NonStationary(
                 k=self.k - 1,
                 action_space=self.opponent_action_space,
@@ -462,12 +573,13 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
     def recalculate_transition_model(self, env):
         """
         Recursively recalculates the transition probability tensor for this agent
-        and all agents in its opponent model hierarchy.
+        and all agents down its cognitive hierarchy, using the current
+        probabilities from the environment.
         """
-        # Calculate current execution probabilities
+        # Recalculate this agent's own transition tensor.
         self.prob_exec_tensor = self._calculate_execution_probabilities(env)
         
-        # Recursively update transition models of lover level-k estimates
+        # Recursively trigger recalculation for the opponent model.
         if self.k > 1 and self.opponent:
             # Check if is intialized
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
@@ -477,12 +589,15 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
 
     def act(self, obs: State, env=None) -> Action:
         """
-        Action selection for the non-stationary case.
-        First, it updates the transition model based on the current environment state.
+        Selects an action for the non-stationary case.
+
+        Crucially, it first updates the transition model based on the current
+        environment's stochasticity before calculating the optimal action.
         """
-        # Recalculate transition model 
+        # Get the latest transition probabilities from the environment.
         self.recalculate_transition_model(env)
         
+        # Use the parent's `act` method with the updated model.
         return super().act(obs, env)
 
 
@@ -490,30 +605,39 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
     """
     A Level-K DP agent that learns the environment's transition model online.
 
-    Instead of using a fixed transition probability tensor, this agent maintains
-    Dirichlet counts for P(executed | intended, state) and updates them after each
-    step, making it suitable for environments with unknown transition model.
+    This agent does not assume a fixed transition model. Instead, it learns
+    a state-dependent model P(a_self_exec, a_opp_exec | a_self_exec, a_opp_exec , state) by maintaining
+    Dirichlet counts for transition outcomes. This makes it suitable for
+    environments with unknown transition dynamics.
     """
     
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
                  n_states: int, epsilon: float, gamma: float, player_id: int, env):
 
-        # Initialize from the base class, which sets up lookups, etc.
+        # Call the parent class constructor to handle all common setup.
         super().__init__(k, action_space, opponent_action_space, n_states, 
                          epsilon, gamma, player_id, env)
         
         # --- Dynamic-Specific Initialization ---
-        # This tensor will be recalculated for the current state at each step.
-        
-        self.prob_exec_tensor = None # This agent learns the transition model, so no fixed tensor
+        # `prob_exec_tensor` is not fixed; it will be calculated on-the-fly for each state.
+
+        # 5D tensor to store transition counts (weights) for learning the model.
+        # Dims: (state, intended_self, intended_opp, executed_self, executed_opp)
+        # We initialize with ones (uniform prior) for Bayesian updating.
+        self.prob_exec_tensor = None 
         self.transition_model_weights = np.ones(
             (self.n_states, self.num_self_actions, self.num_opponent_actions, self.num_self_actions, self.num_opponent_actions)
         )
 
         # Initialize k-level hierarchy
         if self.k == 1:
+            # Base Case (k=1): Model opponent as Level-0 (random policy).
+            # We use Dirichlet counts to learn this policy from observations.
+            # Initially, we assume a uniform prior.
             self.dirichlet_counts = np.ones((self.n_states, len(self.opponent_action_space)))
         elif self.k > 1:
+            # Recursive Step (k>1): The opponent is a Level-(k-1) version of this
+            # same class, with the player roles reversed.
             self.opponent = LevelKDPAgent_Dynamic(
                 k=self.k - 1,
                 action_space=self.opponent_action_space,
@@ -526,13 +650,21 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
             )
 
     def _get_probabilities_for_state(self, obs: State) -> np.ndarray:
-        """Calculates P(executed | intended) from learned counts for a given state."""
+        """
+        Calculates P(a_self_exec, a_opp_exec | a_self_exec, a_opp_exec) for a given state using learned counts.
         
+        Returns:
+            A 4D np.ndarray with dimensions corresponding to:
+            (intended_self, intended_opp, executed_self, executed_opp)
+        """
+        
+        # Get the learned counts for the specific state 'obs'.
         weights_for_obs = self.transition_model_weights[obs, :, :, :, :]
-        # Sum over the last two axes (executed actions) to get the total counts for each intended pair.
+        # Sum over the executed action axes to get total counts for each intended pair.
+        # `keepdims=True` ensures the result can be broadcast for division.
         total_counts = np.sum(weights_for_obs, axis=(2, 3), keepdims=True)
         
-        # Normalize weights to get probabilities, handling division by zero
+        # Normalize weights to get probabilities. Handles division by zero by outputting zero.
         prob_tensor_for_obs = np.divide(
             weights_for_obs, total_counts,
             out=np.zeros_like(weights_for_obs),
@@ -541,25 +673,34 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         return prob_tensor_for_obs
     
     def optim_act(self, obs: State) -> Action:
-        """Selects optimal action using the dynamically learned transition model."""
-        
-        # Update the transition model for the current state before making a decision.
+        """
+        Selects optimal action using the dynamically learned transition model.
+        """
+
+        # Calculate the transition model for the current state based on learned counts.
         self.prob_exec_tensor = self._get_probabilities_for_state(obs)
         
-        # Call the parent's (Stationary) efficient optim_act method
+        # call the parent's `optim_act` method, which will use fresh probability of execution tensor.
         return super().optim_act(obs)
 
-    def update(self, obs: State, actions: list[Action], 
-               rewards, new_obs: State):
-        """Updates the agent's value function V(s,b) and its internal opponent model."""
+    def update(self, obs: State, actions: list[Action], new_obs: State):
+        """
+        Updates the agent's value function V(s,b) and its internal opponent model
+        based on a single transition (s, a, b, s').
         
-        # Correctly assign intended actions based on player_id
-        if self.player_id == 0:  # This agent is the Blue Player (DM)
+        Args:
+            obs: The current state.
+            actions: list of agents and opponents actions in state obs
+            new_obs: The next state after transition.
+        """
+        
+        # Determine the intended actions from the action pair.
+        if self.player_id == 0:  # This agent is the Blue Player
             intended_action_self, intended_action_opp = actions[0], actions[1]
-        else:  # This agent is the Red Player (ADV)
+        else:  # This agent is the Red Player
             intended_action_self, intended_action_opp = actions[1], actions[0]
         
-        # Fast lookup to find which executed actions could have caused the transition s -> new_obs.
+        # Lookup which executed actions could have caused the transition s -> new_obs.
         possible_exec_actions_mask = (self.s_prime_lookup[obs] == new_obs)
         exec_self_indices, exec_opp_indices = np.where(possible_exec_actions_mask)
         
@@ -567,8 +708,9 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         for a_self_exec, a_opp_exec in zip(exec_self_indices, exec_opp_indices):
             self.transition_model_weights[obs, intended_action_self, intended_action_opp, a_self_exec, a_opp_exec] += 1
         
-        # Get the fresh probability tensor for this state before updating the value function
+        # Get the fresh, state-specific probability tensor *before* updating the value function.
         self.prob_exec_tensor = self._get_probabilities_for_state(obs)
         
-        # Call the parent's update method to handle the Bellman update and opponent model
-        super().update(obs, actions, None, new_obs)
+        # Call the parent's update method. It will perform the Bellman update
+        # using the newly calculated `prob_exec_tensor` and update the opponent model.
+        super().update(obs, actions, new_obs)
