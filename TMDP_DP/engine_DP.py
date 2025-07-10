@@ -94,8 +94,8 @@ class CoinGame():
         self.combined_actions = np.column_stack([grid_move.ravel(), grid_push.ravel()])
 
         # --- Stochasticity Parameters ---
-        self.player_0_execution_prob = 1.0
-        self.player_1_execution_prob = 1.0
+        self.player_0_execution_prob = 0.8
+        self.player_1_execution_prob = 0.8
         
         # --- Initial Positions ---
         self.player_0_initial_pos = np.array([self.grid_size // 2, 0])
@@ -288,7 +288,7 @@ class CoinGame():
         """
         return np.max(np.abs(pos1 - pos2)) == 1
 
-    def step(self, actions: list) -> tuple:
+    def step(self, actions: tuple) -> tuple:
         """
         Executes one time step in the environment.
 
