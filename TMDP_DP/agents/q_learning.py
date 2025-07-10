@@ -59,7 +59,7 @@ class IndQLearningAgent():
         else:
             return self.action_space[np.argmax(self.Q[obs, :])]
 
-    def update(self, obs: State, actions: tuple, rewards: tuple, new_obs: State):
+    def update(self, obs: State, actions: tuple[Action, Action], rewards: tuple[Reward, Reward], new_obs: State):
         """
         Updates the Q-function using the vanilla Q-learning update rule.
 

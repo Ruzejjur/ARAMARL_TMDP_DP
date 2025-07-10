@@ -133,16 +133,16 @@ class LevelKQAgent():
         c_b1 = bool(state_copy % base_coll)
 
         # Check for win conditions
-        blue_wins = c_b1 and c_b2
-        red_wins = c_r1 and c_r2
+        p0_wins = c_b1 and c_b2
+        p1_wins = c_r1 and c_r2
         
         # Check for draw condition
         coins_gone = (c_b1 or c_r1) and (c_b2 or c_r2)
-        is_draw = coins_gone and not blue_wins and not red_wins
+        is_draw = coins_gone and not p0_wins and not p1_wins
         
         # NOTE: The Q agent cannot account for the episode ending due to max_steps,
         # as this is not encoded in the state itself. This is a known limitation.
-        return blue_wins or red_wins or is_draw
+        return p0_wins or p1_wins or is_draw
 
     def get_opponent_policy(self, obs:State) -> Policy:
         """
@@ -222,7 +222,7 @@ class LevelKQAgent():
         policy = self.get_policy(obs)
         return choice(self.action_space, p=policy)
 
-    def update(self, obs: int, actions: list, rewards: list, new_obs: int):
+    def update(self, obs: int, actions: tuple[Action, Action], rewards: tuple[Reward, Reward], new_obs: int):
         """
         Updates the Q-function and the internal opponent model after a transition.
 
@@ -240,7 +240,7 @@ class LevelKQAgent():
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
             # Recursively call update on the internal Level-(k-1) model.
             # Note the reversed order for actions and rewards.
-            self.opponent.update(obs, [opponent_action, self_action], [opponent_reward, self_reward], new_obs)
+            self.opponent.update(obs, (opponent_action, self_action), (opponent_reward, self_reward), new_obs)
         else: # k == 1
             assert self.dirichlet_counts is not None, "dirichlet_counts should be initialized for a Level-1 agent."
             # Update the Dirichlet counts for the observed opponent action.

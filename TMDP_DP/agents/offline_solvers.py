@@ -95,7 +95,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
                 policy_table[s, :] = 1.0 / self.num_opponent_actions
         return policy_table
 
-    def get_opponent_policy(self, obs):
+    def get_opponent_policy(self, obs: State):
         """
         Overrides the parent method. Instead of learning or using a recursive
         model, it simply returns the pre-computed policy for the fixed opponent
@@ -109,7 +109,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         """
         return self.opponent_policy_table[obs]
 
-    def run_value_iteration(self, theta=1e-2, max_iters=10000):
+    def run_value_iteration(self, theta: float = 1e-2, max_iters: int =10000):
         """
         Performs offline, in-place (asynchronous) value iteration on the V(s, b)
         table until convergence.
@@ -194,7 +194,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
             self.optim_policy_table[s] = self.optim_act(s)
         print("Optimal policy extracted.")
 
-    def act(self, obs, env=None):
+    def act(self, obs: State, env=None):
         """
         Returns the pre-computed optimal action for the given state.
 
@@ -208,7 +208,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         
         return self.optim_policy_table[obs]
 
-    def update(self, obs, actions, new_obs):
+    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State):
         """
         This agent is an offline solver and does not learn during online interaction.
         This method is implemented to satisfy the agent interface but performs no action.

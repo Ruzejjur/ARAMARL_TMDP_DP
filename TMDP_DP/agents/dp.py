@@ -27,7 +27,7 @@ class _BaseLevelKDPAgent():
         n_states (int): The total number of states in the environment.
         epsilon (float): The exploration rate for epsilon-greedy policies.
         gamma (float): The discount factor for future rewards.
-        player_id (int): The agent's identifier (0 for Blue, 1 for Red).
+        player_id (int): The agent's identifier (0, 1).
         action_space (np.ndarray): The set of actions available to this agent.
         opponent_action_space (np.ndarray): The set of actions available to the opponent.
         env_snapshot (CoinGame): A deep copy of the environment, set to be deterministic.
@@ -66,26 +66,19 @@ class _BaseLevelKDPAgent():
         # simulation of the outcome of any action pair from any state without
         # affecting the actual game environment.
         self.env_snapshot = copy.deepcopy(env)
-        self.env_snapshot.blue_player_execution_prob = 1.0
-        self.env_snapshot.red_player_execution_prob = 1.0
+        self.env_snapshot.player_0_execution_prob = 1.0
+        self.env_snapshot.player_1_execution_prob = 1.0
         
         # ---Action Setup ---
         # Determine action spaces and details based on player_id
-        if self.player_id == 0: # This agent is the Blue Player
-            self.self_action_details = self.env_snapshot.combined_actions_blue
-            self.opponent_action_details = self.env_snapshot.combined_actions_red
-            self.num_self_actions = len(env.combined_actions_blue)
-            self.num_opponent_actions = len(env.combined_actions_red)
-            self.self_available_move_actions_num = len(env.available_move_actions_DM)
-            self.opponent_available_move_actions_num = len(env.available_move_actions_Adv)
-        else: # This agent is the Red Player
-            self.self_action_details = self.env_snapshot.combined_actions_red
-            self.opponent_action_details = self.env_snapshot.combined_actions_blue
-            self.num_self_actions = len(env.combined_actions_red)
-            self.num_opponent_actions = len(env.combined_actions_blue)
-            self.self_available_move_actions_num = len(env.available_move_actions_Adv)
-            self.opponent_available_move_actions_num = len(env.available_move_actions_DM)
-            
+
+        self.self_action_details = self.env_snapshot.combined_actions
+        self.opponent_action_details = self.env_snapshot.combined_actions
+        self.num_self_actions = len(env.combined_actions)
+        self.num_opponent_actions = len(env.combined_actions)
+        self.self_available_move_actions_num = len(env.available_move_actions)
+        self.opponent_available_move_actions_num = len(env.available_move_actions)
+
         # --- Value Function and Model Initialization ---
         # V(s, opponent_action): The value of being in state 's' *after* 
         # the opponent has committed to taking 'opponent_action'.
@@ -139,7 +132,7 @@ class _BaseLevelKDPAgent():
         """
         
         # Grid size N, base for coin collection status
-        _, base_coll = self.env_snapshot.N**2, 2
+        _, base_coll = self.env_snapshot.grid_size**2, 2
         
         # Radix decoding of the state integer to get coin collection status
         state_copy = obs
@@ -152,16 +145,16 @@ class _BaseLevelKDPAgent():
         c_b1 = bool(state_copy % base_coll)
 
         # Check for win conditions
-        blue_wins = c_b1 and c_b2
-        red_wins = c_r1 and c_r2
+        p0_wins = c_b1 and c_b2
+        p1_wins = c_r1 and c_r2
         
         # Check for draw condition
         coins_gone = (c_b1 or c_r1) and (c_b2 or c_r2)
-        is_draw = coins_gone and not blue_wins and not red_wins
+        is_draw = coins_gone and not p0_wins and not p1_wins
         
         # NOTE: The DP agent cannot account for the episode ending due to max_steps,
         # as this is not encoded in the state itself. This is a known limitation.
-        return blue_wins or red_wins or is_draw
+        return p0_wins or p1_wins or is_draw
 
     def _precompute_lookups(self) -> tuple:
         """
@@ -195,10 +188,10 @@ class _BaseLevelKDPAgent():
                     # Save the environment's state to restore it after the step
                     current_env_state = self.env_snapshot.get_state()
                     
-                    # The environment engine expects actions in [blue, red] order.
-                    if self.player_id == 0: # I am the Blue Player
+                    # The environment engine expects actions in [0, 1] order.
+                    if self.player_id == 0:
                         action_pair = (a_self_exec, a_opp_exec)
-                    else: # I am the Red Player
+                    else:
                         action_pair = (a_opp_exec, a_self_exec)
 
                     # Simulate one step with the specified executed action pair
@@ -222,7 +215,7 @@ class _BaseLevelKDPAgent():
         
         self.env_snapshot.reset()
         # Grid size N, base for coin collection status
-        base_pos, base_coll = self.env_snapshot.N**2, 2
+        base_pos, base_coll = self.env_snapshot.grid_size**2, 2
         state_copy = obs
         
         # Radix decode the state integer to get all environment components
@@ -234,17 +227,17 @@ class _BaseLevelKDPAgent():
         state_copy //= base_coll
         c_b1 = bool(state_copy % base_coll)
         state_copy //= base_coll
-        red_player_flat_pos = state_copy % base_pos
+        p1_flat = state_copy % base_pos
         state_copy //= base_pos
-        blue_player_flat_pos = state_copy
+        p0_flat = state_copy
         
         # Set the simulation environment's attributes to match the decoded state
-        self.env_snapshot.blue_player = np.array([blue_player_flat_pos % self.env_snapshot.N, blue_player_flat_pos // self.env_snapshot.N])
-        self.env_snapshot.red_player = np.array([red_player_flat_pos % self.env_snapshot.N, red_player_flat_pos // self.env_snapshot.N])
-        self.env_snapshot.blue_collected_coin1, self.env_snapshot.blue_collected_coin2 = c_b1, c_b2
-        self.env_snapshot.red_collected_coin1, self.env_snapshot.red_collected_coin2 = c_r1, c_r2
-        self.env_snapshot.coin1_available = not (c_b1 or c_r1)
-        self.env_snapshot.coin2_available = not (c_b2 or c_r2)
+        self.env_snapshot.player_0_pos = np.array([p0_flat % self.env_snapshot.grid_size, p0_flat // self.env_snapshot.grid_size])
+        self.env_snapshot.player_1_pos = np.array([p1_flat % self.env_snapshot.grid_size, p1_flat // self.env_snapshot.grid_size])
+        self.env_snapshot.player_0_collected_coin0, self.env_snapshot.player_0_collected_coin1 = c_b1, c_b2
+        self.env_snapshot.player_1_collected_coin0, self.env_snapshot.player_1_collected_coin1 = c_r1, c_r2
+        self.env_snapshot.coin0_available = not (c_b1 or c_r1)
+        self.env_snapshot.coin1_available = not (c_b2 or c_r2)
     
     def update_epsilon(self, new_epsilon: float):
         """
@@ -433,7 +426,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         policy = self.get_policy(obs)
         return choice(self.action_space, p=policy)
 
-    def update(self, obs: State, actions: list[Action], new_obs: State):
+    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State):
         """
         Updates the agent's value function V(s,b) and its internal opponent model
         based on a single transition (s, a, b, s').
@@ -496,10 +489,10 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
             (intended_self, intended_opp, executed_self, executed_opp)
         """
         
-        if self.player_id == 0: # This agent is the Blue Player
-            self_exec_prob, opp_exec_prob = env.blue_player_execution_prob, env.red_player_execution_prob
-        else: # This agent is the Red Player
-            self_exec_prob, opp_exec_prob = env.red_player_execution_prob, env.blue_player_execution_prob
+        if self.player_id == 0: 
+            self_exec_prob, opp_exec_prob = env.player_0_execution_prob, env.player_1_execution_prob
+        else:
+            self_exec_prob, opp_exec_prob = env.player_1_execution_prob, env.player_0_execution_prob
         
         # Extract move and push actions from the detailes
         self_moves, self_pushes = self.self_action_details[:, 0], self.self_action_details[:, 1]
@@ -537,7 +530,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
     A Level-K DP agent for non-stationary environments.
 
     This agent is designed for environments where the action execution
-    probabilities (e.g., `env.blue_player_execution_prob`) can change over time.
+    probabilities (e.g., `env.player_0_execution_prob`) can change over time.
     It adapts by recalculating the transition probability tensor before every
     action selection.
     
@@ -683,21 +676,21 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         # call the parent's `optim_act` method, which will use fresh probability of execution tensor.
         return super().optim_act(obs)
 
-    def update(self, obs: State, actions: list[Action], new_obs: State):
+    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State):
         """
         Updates the agent's value function V(s,b) and its internal opponent model
         based on a single transition (s, a, b, s').
         
         Args:
             obs: The current state.
-            actions: list of agents and opponents actions in state obs
+            actions: tuple of agents and opponents actions in state obs
             new_obs: The next state after transition.
         """
         
         # Determine the intended actions from the action pair.
-        if self.player_id == 0:  # This agent is the Blue Player
+        if self.player_id == 0: 
             intended_action_self, intended_action_opp = actions[0], actions[1]
-        else:  # This agent is the Red Player
+        else: 
             intended_action_self, intended_action_opp = actions[1], actions[0]
         
         # Lookup which executed actions could have caused the transition s -> new_obs.

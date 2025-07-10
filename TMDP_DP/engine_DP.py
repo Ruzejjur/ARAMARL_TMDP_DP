@@ -173,7 +173,7 @@ class CoinGame():
                 if not self.coin0_available:
                     return 0.0, 0.0  # Coin already gone, no rewards
                 coin_pos = self.coin_0_pos
-            else: # coin_index == 2
+            else: # coin_index == 1
                 if not self.coin1_available:
                     return 0.0, 0.0
                 coin_pos = self.coin_1_pos
@@ -388,12 +388,12 @@ class CoinGame():
         # --- Coin collection logic ---
         
         # Coin 1
-        delta_0, delta_1 = self._resolve_coin_collection(1)
+        delta_0, delta_1 = self._resolve_coin_collection(0)
         reward_0 += delta_0
         reward_1 += delta_1
 
         # Coin 2
-        delta_0, delta_1 = self._resolve_coin_collection(2)
+        delta_0, delta_1 = self._resolve_coin_collection(1)
         reward_0 += delta_0
         reward_1 += delta_1
 

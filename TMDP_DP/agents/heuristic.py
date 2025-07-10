@@ -18,7 +18,7 @@ class ManhattanAgent():
 
     Attributes:
         grid_n (int): The size of the grid (N x N).
-        player_id (int): The agent's identifier (0 for Blue, 1 for Red).
+        player_id (int): The agent's identifier (0, 1).
         coin_location (np.ndarray): The coordinates of the two coins.
         optimal_actions_cache (np.ndarray): Caches the list of optimal actions for
             the last observed state. Used by DPAgent_PerfectModel.
@@ -29,7 +29,7 @@ class ManhattanAgent():
         # The size of the N x N grid
         self.grid_size = grid_size
         
-        # Player identifier (0 for Blue, 1 for Red)
+        # Player identifier (0 or 1)
         self.player_id = player_id
         
         # Fixed locations of the coins
@@ -52,10 +52,10 @@ class ManhattanAgent():
 
         Returns:
             A tuple containing:
-            - blue_player_pos (np.ndarray): Coordinates of the Blue player.
-            - red_player_pos (np.ndarray): Coordinates of the Red player.
-            - coin1_available (bool): True if coin 1 has not been collected.
-            - coin2_available (bool): True if coin 2 has not been collected.
+            - player_0_pos (np.ndarray): Coordinates of player 0.
+            - player_1_pos (np.ndarray): Coordinates of player 1.
+            - coin0_available (bool): True if coin 1 has not been collected.
+            - coin1_available (bool): True if coin 2 has not been collected.
         """
         
         # Setting bases for radix decoding
@@ -71,14 +71,14 @@ class ManhattanAgent():
         p1_flat = state_copy
         
         # Decoding player locations on the grid
-        blue_player = np.array([p1_flat % self.grid_size, p1_flat // self.grid_size])
-        red_player_pos = np.array([p2_flat % self.grid_size, p2_flat // self.grid_size])
+        player_0_pos = np.array([p1_flat % self.grid_size, p1_flat // self.grid_size])
+        player_1_pos = np.array([p2_flat % self.grid_size, p2_flat // self.grid_size])
         
         # Setting coin availability based on coin collection indicators from the state
-        coin1_available = not (c_b1 or c_r1)
-        coin2_available = not (c_b2 or c_r2)
+        coin0_available = not (c_b1 or c_r1)
+        coin1_available = not (c_b2 or c_r2)
 
-        return blue_player, red_player_pos, coin1_available, coin2_available
+        return player_0_pos, player_1_pos, coin0_available, coin1_available
     
     def _are_players_adjacent(self, player1_pos: np.ndarray, player2_pos: np.ndarray) -> bool:
         """
@@ -143,13 +143,13 @@ class ManhattanAgent():
         moving towards it, pushing if the opponent is adjacent.
         """
         # Decoding radix encoded state
-        blue_player_pos, red_player_pos, coin1_available, coin2_available = self.decode_state(obs)
+        player_0_pos, player_1_pos, coin0_available, coin1_available = self.decode_state(obs)
 
         # Determine the agent's current position based on player_id
-        player_pos = blue_player_pos if self.player_id == 0 else red_player_pos
+        player_pos = player_0_pos if self.player_id == 0 else player_1_pos
 
         # Check if player are adjacent
-        players_are_adjacent = self._are_players_adjacent(blue_player_pos, red_player_pos)
+        players_are_adjacent = self._are_players_adjacent(player_0_pos, player_1_pos)
         
         # Set coin positions
         coin1_pos = self.coin_location[0]
@@ -157,15 +157,15 @@ class ManhattanAgent():
         
         # Calculate Manhattan distances to each coin, if it's available
         # Set distance do ininity if not
-        dist_to_coin1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
-        dist_to_coin2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
+        dist_to_coin1 = manhattan_distance(player_pos, coin1_pos) if coin0_available else float('inf')
+        dist_to_coin2 = manhattan_distance(player_pos, coin2_pos) if coin1_available else float('inf')
 
         # Calculate target directional vector
         target_direction = None
         
         # --- Target Selection Logic ---
         # Handle case where no coins are available. Move randomly.
-        if not coin1_available and not coin2_available:
+        if not coin0_available and not coin1_available:
             return choice(np.array([0, 2]), p=[0.5, 0.5])
 
         # Decide which coin to target based on distance
@@ -175,11 +175,11 @@ class ManhattanAgent():
             target_direction = coin2_pos - player_pos
         else: # Distances are equal (or only one coin is left)
             # Handle tie in distance: target one of the two coins randomly.
-            if coin1_available and coin2_available:
+            if coin0_available and coin1_available:
                 chosen_coin_pos = coin1_pos if np.random.rand() < 0.5 else coin2_pos
                 target_direction = chosen_coin_pos - player_pos
             # Otherwise, target the only available coin
-            elif coin1_available:
+            elif coin0_available:
                 target_direction = coin1_pos - player_pos
             else: # only coin2 is available
                 target_direction = coin2_pos - player_pos
@@ -238,14 +238,14 @@ class ManhattanAgent_Aggressive(ManhattanAgent):
             The integer ID of the chosen action.
         """
         # Decoding radix encoded state
-        blue_player_pos, red_player_pos, coin1_available, coin2_available = self.decode_state(obs)
+        player_0_pos, player_1_pos, coin0_available, coin1_available = self.decode_state(obs)
 
         # Determine the agent's and opponent's current position based on player_id
-        player_pos = blue_player_pos if self.player_id == 0 else red_player_pos
-        opponent_pos = red_player_pos if self.player_id == 0 else blue_player_pos
+        player_pos = player_0_pos if self.player_id == 0 else player_1_pos
+        opponent_pos = player_1_pos if self.player_id == 0 else player_0_pos
         
         # Check if player are adjacent
-        players_are_adjacent = self._are_players_adjacent(blue_player_pos, red_player_pos)
+        players_are_adjacent = self._are_players_adjacent(player_0_pos, player_1_pos)
         
         # Set coin positions
         coin1_pos = self.coin_location[0]
@@ -257,8 +257,8 @@ class ManhattanAgent_Aggressive(ManhattanAgent):
         
         # Calculate Manhattan distances to each coin, if it's available
         # Set distance do ininity if not.
-        dist_to_coin1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
-        dist_to_coin2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
+        dist_to_coin1 = manhattan_distance(player_pos, coin1_pos) if coin0_available else float('inf')
+        dist_to_coin2 = manhattan_distance(player_pos, coin2_pos) if coin1_available else float('inf')
         # Calculate Manhattan distances to opponent
         dist_player_to_opponent = manhattan_distance(player_pos, opponent_pos)
 
@@ -270,7 +270,7 @@ class ManhattanAgent_Aggressive(ManhattanAgent):
 
         # Tie-breaking: If the opponent (index 2) is tied with a coin for the
         # minimum distance, prioritize the coin.
-        if 2 in min_dist_idx and any(i in min_dist_idx for i in (0, 1, 2, 3)):
+        if 2 in min_dist_idx and (0 in min_dist_idx or 1 in min_dist_idx):
             min_dist_idx = np.argmin(dist_array[0:2]) # Re-evaluate distance between coins
         else:
             # Break ties randomly
@@ -328,14 +328,14 @@ class ManhattanAgent_Ultra_Aggressive(ManhattanAgent):
             The integer ID of the chosen action.
         """
         # Decoding radix encoded state
-        blue_player_pos, red_player_pos, coin1_available, coin2_available = self.decode_state(obs)
+        player_0_pos, player_1_pos, coin0_available, coin1_available = self.decode_state(obs)
 
         # Determine the agent's and opponent's current position based on player_id
-        player_pos = blue_player_pos if self.player_id == 0 else red_player_pos
-        opponent_pos = red_player_pos if self.player_id == 0 else blue_player_pos
+        player_pos = player_0_pos if self.player_id == 0 else player_1_pos
+        opponent_pos = player_1_pos if self.player_id == 0 else player_0_pos
         
         # Check if player are adjacent
-        players_are_adjacent = self._are_players_adjacent(blue_player_pos, red_player_pos)
+        players_are_adjacent = self._are_players_adjacent(player_0_pos, player_1_pos)
         
         # Set coin positions
         coin1_pos = self.coin_location[0]
@@ -348,10 +348,10 @@ class ManhattanAgent_Ultra_Aggressive(ManhattanAgent):
         # Calculate Manhattan distances to each coin, if it's available
         # Set distance do ininity if not.
         # NOTE: Distances: p=player, o=opponent, c1/c2=coins
-        dist_p_c1 = manhattan_distance(player_pos, coin1_pos) if coin1_available else float('inf')
-        dist_p_c2 = manhattan_distance(player_pos, coin2_pos) if coin2_available else float('inf')
-        dist_o_c1 = manhattan_distance(opponent_pos, coin1_pos) if coin1_available else float('inf')
-        dist_o_c2 = manhattan_distance(opponent_pos, coin2_pos) if coin2_available else float('inf')
+        dist_p_c1 = manhattan_distance(player_pos, coin1_pos) if coin0_available else float('inf')
+        dist_p_c2 = manhattan_distance(player_pos, coin2_pos) if coin1_available else float('inf')
+        dist_o_c1 = manhattan_distance(opponent_pos, coin1_pos) if coin0_available else float('inf')
+        dist_o_c2 = manhattan_distance(opponent_pos, coin2_pos) if coin1_available else float('inf')
         # Calculate Manhattan distances to opponent
         dist_p_o = manhattan_distance(player_pos, opponent_pos)
         
