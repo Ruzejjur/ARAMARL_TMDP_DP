@@ -4,7 +4,7 @@ import copy
 from typing import cast
 from tqdm.notebook import tqdm
 
-from base import LearningAgent
+from .base import LearningAgent
 
 # --- Type Aliases for Readability ---
 State = int

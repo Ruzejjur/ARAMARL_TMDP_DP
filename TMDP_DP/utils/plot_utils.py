@@ -1,7 +1,5 @@
 import numpy as np
 
-from IPython.display import HTML
-from IPython.display import Video
 # Also ffmpeg is required for video saving
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
