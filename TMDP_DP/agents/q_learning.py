@@ -32,13 +32,15 @@ class IndQLearningAgent(LearningAgent):
     """
 
     def __init__(self, action_space: np.ndarray, n_states: int, learning_rate: float,
-                 epsilon: float, gamma: float):
-
+                 epsilon: float, gamma: float, player_id: int):
+        
+        self.action_space = action_space
         self.n_states = n_states
         self.learning_rate = learning_rate
         self.epsilon = epsilon
         self.gamma = gamma
-        self.action_space = action_space
+        self.player_id = player_id
+
         
         # This is the Q-function Q(s, a)
         self.Q = -10*np.ones([self.n_states, len(self.action_space)])
@@ -78,8 +80,8 @@ class IndQLearningAgent(LearningAgent):
         if rewards is None:
             raise ValueError("IndQLearningAgent requires a rewards tuple for its update method.")
         
-        self_action, _ = actions
-        self_reward, _ = rewards
+        self_action = actions[0] if self.player_id == 0 else actions[1]
+        self_reward = rewards[0] if self.player_id == 0 else rewards[1]
 
         self.Q[obs, self_action] = (1 - self.learning_rate)*self.Q[obs, self_action] + self.learning_rate*(self_reward + self.gamma*np.max(self.Q[new_obs, :]))
         
@@ -107,9 +109,9 @@ class IndQLearningAgentSoftmax(IndQLearningAgent):
     """
     
     def __init__(self, action_space: np.ndarray, n_states: int, learning_rate: float,
-                 epsilon: float, gamma: float, beta: float = 1.0):
+                 epsilon: float, gamma: float, beta: float = 1.0, player_id: int = 0):
         # Call the parent constructor
-        super().__init__(action_space, n_states, learning_rate, epsilon, gamma)
+        super().__init__(action_space, n_states, learning_rate, epsilon, gamma, player_id)
         
         self.beta = beta
         

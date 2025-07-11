@@ -48,19 +48,21 @@ class LevelKQAgent(LearningAgent):
                                        opponent's policy. Used only by Level-1 agents.
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float):
+                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, player_id: int):
         if k < 1:
             raise ValueError("Level k must be a positive integer.")
 
         # --- Core Agent Parameters ---
         self.k = k
+        self.action_space = action_space
         self.n_states = n_states
         self.alpha = learning_rate
         self.epsilon = epsilon
         self.gamma = gamma
         self.opponent_action_space = opponent_action_space
         self.grid_size = grid_size
-        self.action_space = action_space
+        self.player_id = player_id
+        
 
         # Q-function Q(s, a_self, a_opponent) setup
         self.Q = self._setup_Q(-10)
@@ -86,7 +88,8 @@ class LevelKQAgent(LearningAgent):
                 learning_rate=self.alpha, # Using same parameters for the modeled opponent
                 epsilon=self.epsilon,
                 gamma=self.gamma,
-                grid_size=grid_size
+                grid_size=grid_size,
+                player_id=1-self.player_id
             )
             
     def _setup_Q(self,initial_value: int) -> QFunction:
@@ -238,16 +241,22 @@ class LevelKQAgent(LearningAgent):
         
         if rewards is None:
             raise ValueError("LevelKQAgent requires a rewards tuple for its update method.")
-        
-        self_action, opponent_action = actions
-        self_reward, opponent_reward = rewards
 
+        
+        if self.player_id == 0:
+            self_action, opponent_action = actions
+            self_reward, _ = rewards
+        else: 
+            self_action, opponent_action = actions[::-1]
+            self_reward, _ = rewards[::-1]
+        
+        
         # --- Update Opponent Model ---
         if self.k > 1:
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
             # Recursively call update on the internal Level-(k-1) model.
             # Note the reversed order for actions and rewards.
-            self.opponent.update(obs, (opponent_action, self_action), new_obs, (opponent_reward, self_reward))
+            self.opponent.update(obs, actions, new_obs, rewards)
         else: # k == 1
             assert self.dirichlet_counts is not None, "dirichlet_counts should be initialized for a Level-1 agent."
             # Update the Dirichlet counts for the observed opponent action.
@@ -294,10 +303,10 @@ class LevelKQAgentSoftmax(LevelKQAgent):
                       Higher beta leads to more deterministic (greedy) actions.
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, beta: float = 1.0):
+                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, beta: float, player_id: int):
         
         # Call the parent class constructor to handle all common setup.
-        super().__init__(k, action_space, opponent_action_space, n_states, grid_size, learning_rate, epsilon, gamma)
+        super().__init__(k, action_space, opponent_action_space, n_states, grid_size, learning_rate, epsilon, gamma, player_id)
         
         self.beta = beta
 
@@ -313,7 +322,8 @@ class LevelKQAgentSoftmax(LevelKQAgent):
                 learning_rate=self.alpha,
                 epsilon=self.epsilon,
                 gamma=self.gamma,
-                beta=self.beta
+                beta=self.beta,
+                player_id=1-self.player_id
             )
 
     def get_policy(self, obs):
