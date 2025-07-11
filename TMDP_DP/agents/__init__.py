@@ -28,7 +28,7 @@ from .level_k_q import (
 
 # --- Level-K Dynamic Programming Agents ---
 # Import the DP agent family
-from .dp import (
+from .level_k_dp import (
     LevelKDPAgent_Stationary,
     LevelKDPAgent_NonStationary,
     LevelKDPAgent_Dynamic,

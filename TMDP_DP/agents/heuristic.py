@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.random import choice
 
+from .base import BaseAgent
 from .utils import manhattan_distance
 
 # --- Type Aliases for Readability ---
@@ -8,7 +9,7 @@ State = int
 Action = int
 Policy = np.ndarray
 
-class ManhattanAgent():
+class ManhattanAgent(BaseAgent):
     """
     A heuristic agent that moves towards the closest available coin.
 

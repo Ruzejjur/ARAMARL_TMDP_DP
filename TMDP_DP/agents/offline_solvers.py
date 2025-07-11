@@ -2,7 +2,9 @@ import numpy as np
 import copy
 from tqdm.notebook import tqdm
 
-from .dp import LevelKDPAgent_Stationary
+from typing import Optional
+
+from .level_k_dp import LevelKDPAgent_Stationary
 
 # --- Type Aliases for Readability ---
 State = int
@@ -36,7 +38,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         optim_policy_table (np.ndarray): A table of shape (n_states,) storing the
                                          final, optimal action for each state.
     """
-    def __init__(self, action_space: np.ndarray, opponent_action_space: np.ndarray, n_states: State, gamma: float, player_id: int, env, opponent):
+    def __init__(self, action_space: np.ndarray, opponent_action_space: np.ndarray, n_states: int, gamma: float, player_id: int, env, opponent):
         # Initialize as a Level-1 DP Agent to leverage its pre-computation,
         # lookup tables, and vectorized calculation methods.
         # k=1 is sufficient as we are pre-solving the optimal policy.
@@ -109,7 +111,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         """
         return self.opponent_policy_table[obs]
 
-    def run_value_iteration(self, theta: float = 1e-2, max_iters: int =10000):
+    def run_value_iteration(self, theta: float = 1e-2, max_iters: int = 10000):
         """
         Performs offline, in-place (asynchronous) value iteration on the V(s, b)
         table until convergence.
@@ -194,7 +196,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
             self.optim_policy_table[s] = self.optim_act(s)
         print("Optimal policy extracted.")
 
-    def act(self, obs: State, env=None):
+    def act(self, obs: State, env=None) -> Action:
         """
         Returns the pre-computed optimal action for the given state.
 
@@ -208,7 +210,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         
         return self.optim_policy_table[obs]
 
-    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State):
+    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State, rewards: Optional[tuple[Reward, Reward]] = None):
         """
         This agent is an offline solver and does not learn during online interaction.
         This method is implemented to satisfy the agent interface but performs no action.

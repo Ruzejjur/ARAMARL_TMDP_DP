@@ -4,6 +4,8 @@ import copy
 from typing import cast
 from tqdm.notebook import tqdm
 
+from base import LearningAgent
+
 # --- Type Aliases for Readability ---
 State = int
 Action = int
@@ -12,7 +14,7 @@ Policy = np.ndarray
 ValueFunction = np.ndarray
 ActionDetails = np.ndarray
 
-class _BaseLevelKDPAgent():
+class _BaseLevelKDPAgent(LearningAgent):
     """
     Base class for Level-K Dynamic Programming agents.
 
@@ -426,7 +428,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         policy = self.get_policy(obs)
         return choice(self.action_space, p=policy)
 
-    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State):
+    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State, rewards = None):
         """
         Updates the agent's value function V(s,b) and its internal opponent model
         based on a single transition (s, a, b, s').
@@ -444,7 +446,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         if self.k > 1:
             # If k>1, recursively call update on the internal Level-(k-1) model
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
-            self.opponent.update(obs, actions, new_obs)
+            self.opponent.update(obs, actions, new_obs, None)
         else:
             # If k=1, update the Dirichlet counts for the observed opponent action.
             assert self.dirichlet_counts is not None, "dirichlet_counts should be initialized for a Level-1 agent."
@@ -676,7 +678,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         # call the parent's `optim_act` method, which will use fresh probability of execution tensor.
         return super().optim_act(obs)
 
-    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State):
+    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State, rewards = None):
         """
         Updates the agent's value function V(s,b) and its internal opponent model
         based on a single transition (s, a, b, s').
@@ -706,4 +708,4 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         
         # Call the parent's update method. It will perform the Bellman update
         # using the newly calculated `prob_exec_tensor` and update the opponent model.
-        super().update(obs, actions, new_obs)
+        super().update(obs, actions, new_obs, None)

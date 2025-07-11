@@ -2,7 +2,10 @@ import numpy as np
 from numpy.random import choice
 from tqdm.notebook import tqdm
 
+from typing import Optional
+
 from .utils import softmax
+from .base import LearningAgent
 
 # --- Type Aliases for Readability ---
 State = int
@@ -11,7 +14,7 @@ Reward = float
 Policy = np.ndarray
 QFunction = np.ndarray
 
-class LevelKQAgent():
+class LevelKQAgent(LearningAgent):
     """
     A Level-K Q-learning agent for multi-agent environments.
 
@@ -222,7 +225,7 @@ class LevelKQAgent():
         policy = self.get_policy(obs)
         return choice(self.action_space, p=policy)
 
-    def update(self, obs: int, actions: tuple[Action, Action], rewards: tuple[Reward, Reward], new_obs: int):
+    def update(self, obs: int, actions: tuple[Action, Action], new_obs: int, rewards: Optional[tuple[Reward, Reward]]):
         """
         Updates the Q-function and the internal opponent model after a transition.
 
@@ -232,6 +235,10 @@ class LevelKQAgent():
             rewards (list): A list [self_reward, opponent_reward].
             new_obs (int): The state after the action.
         """
+        
+        if rewards is None:
+            raise ValueError("LevelKQAgent requires a rewards tuple for its update method.")
+        
         self_action, opponent_action = actions
         self_reward, opponent_reward = rewards
 
@@ -240,7 +247,7 @@ class LevelKQAgent():
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
             # Recursively call update on the internal Level-(k-1) model.
             # Note the reversed order for actions and rewards.
-            self.opponent.update(obs, (opponent_action, self_action), (opponent_reward, self_reward), new_obs)
+            self.opponent.update(obs, (opponent_action, self_action), new_obs, (opponent_reward, self_reward))
         else: # k == 1
             assert self.dirichlet_counts is not None, "dirichlet_counts should be initialized for a Level-1 agent."
             # Update the Dirichlet counts for the observed opponent action.

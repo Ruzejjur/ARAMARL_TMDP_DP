@@ -1,7 +1,10 @@
 import numpy as np
 from numpy.random import choice
 
+from typing import Optional
+
 from .utils import softmax
+from .base import LearningAgent
 
 # --- Type Aliases for Readability ---
 State = int
@@ -10,7 +13,7 @@ Reward = float
 Policy = np.ndarray
 QFunction = np.ndarray
 
-class IndQLearningAgent():
+class IndQLearningAgent(LearningAgent):
     """
     An independent Q-learning (IQL) agent.
 
@@ -40,7 +43,7 @@ class IndQLearningAgent():
         # This is the Q-function Q(s, a)
         self.Q = -10*np.ones([self.n_states, len(self.action_space)])
 
-    def act(self, obs: State) -> Action:
+    def act(self, obs: State, env = None) -> Action:
         """
         Selects an action using an epsilon-greedy policy.
 
@@ -59,7 +62,7 @@ class IndQLearningAgent():
         else:
             return self.action_space[np.argmax(self.Q[obs, :])]
 
-    def update(self, obs: State, actions: tuple[Action, Action], rewards: tuple[Reward, Reward], new_obs: State):
+    def update(self, obs: State, actions: tuple[Action, Action], new_obs: State, rewards: Optional[tuple[Reward, Reward]]):
         """
         Updates the Q-function using the vanilla Q-learning update rule.
 
@@ -72,6 +75,9 @@ class IndQLearningAgent():
             rewards (list): A list [self_reward, opponent_reward].
             new_obs (int): The state after the action.
         """
+        if rewards is None:
+            raise ValueError("IndQLearningAgent requires a rewards tuple for its update method.")
+        
         self_action, _ = actions
         self_reward, _ = rewards
 
