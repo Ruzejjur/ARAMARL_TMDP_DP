@@ -86,7 +86,7 @@ class LevelKQAgent(LearningAgent):
                 opponent_action_space=self.action_space,
                 n_states=self.n_states,
                 learning_rate=self.alpha, # Using same parameters for the modeled opponent
-                epsilon=0,
+                epsilon=self.epsilon,
                 gamma=self.gamma,
                 grid_size=grid_size,
                 player_id=1-self.player_id
@@ -289,8 +289,8 @@ class LevelKQAgent(LearningAgent):
         """
         
         self.epsilon = new_epsilon
-        # if self.k > 1 and self.opponent:
-        #     self.opponent.update_epsilon(new_epsilon)
+        if self.k > 1 and self.opponent:
+            self.opponent.update_epsilon(new_epsilon)
 
 
 class LevelKQAgentSoftmax(LevelKQAgent):

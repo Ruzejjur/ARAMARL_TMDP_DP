@@ -5,6 +5,8 @@ Garbage/
 Optimization_plan.rtf
 *.json
 *.joblib
+*.yaml
+*.npy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

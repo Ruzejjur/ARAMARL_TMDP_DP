@@ -1,9 +1,9 @@
 
 experiment_settings:
   name: "Level1QAgent_vs_IQL_Softmax"
-  num_runs: 1         # How many times to repeat the experiment with different seeds
+  num_runs: 10         # How many times to repeat the experiment with different seeds
   num_episodes: 1000 # Number of episodes per run
-  results_dir: "results/test" # Directory to save plots and data
+  results_dir: "results/" # Directory to save plots and data
 
 environment_settings:
   class: "CoinGame"

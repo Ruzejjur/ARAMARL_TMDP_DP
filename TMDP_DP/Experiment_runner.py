@@ -3,12 +3,26 @@ import numpy as np
 from tqdm.notebook import tqdm
 import os
 import inspect
+import json
+from datetime import datetime
 
 # Import your custom modules
 from engine_DP import CoinGame
 import agents
 from utils.exploration_schedule_utils import linear_epsilon_decay
-from utils.plot_utils import plot, animate_trajectory_from_log
+from utils.plot_utils import plot
+
+
+class NumpyArrayEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist() # Convert NumPy arrays to Python lists
+        if isinstance(obj, np.integer):
+            return int(obj) # Convert NumPy integers to Python integers
+        if isinstance(obj, np.floating):
+            return float(obj) # Convert NumPy floats to Python floats
+        # Let the base class default method raise the TypeError for other types
+        return json.JSONEncoder.default(self, obj)
 
 def load_config(config_path):
     """Loads and returns the YAML configuration file containing agent and environment setup."""
@@ -117,8 +131,13 @@ def run_experiment(config, log_trajectory=False):
     env_settings = config['environment_settings']
     agent_configs = config['agent_settings']
     
-    # Create results directory if it doesn't exist
-    os.makedirs(exp_settings['results_dir'], exist_ok=True)
+    # --- Create a unique directory for this experiment run ---
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    experiment_name = exp_settings.get('name', 'experiment')
+    run_dir_name = f"{experiment_name}_{timestamp}"
+    results_path = os.path.join(exp_settings['results_dir'], run_dir_name)
+    os.makedirs(results_path, exist_ok=True)
+    print(f"Results for this run will be saved in: {results_path}")
     
     # Initialize Environment
     env = CoinGame(**env_settings['params'])
@@ -197,12 +216,33 @@ def run_experiment(config, log_trajectory=False):
         all_rewards_p2.append(run_rewards_p2)
 
     # --- Plotting and Saving ---
-    plot_path = os.path.join(exp_settings['results_dir'], exp_settings['name'])
+    plot_path = os.path.join(results_path, experiment_name)
     plot(all_rewards_p1, all_rewards_p2, 
          moving_average_window_size=config['plotting_settings']['moving_average_window'], 
          dir=plot_path)
     print(f"Plot saved to {plot_path}.png")
     
+    # --- Results ---
+    
+    # Save trajectory of each game
+    if log_trajectory:
+        traj_path = os.path.join(results_path, 'trajectory_log.json')
+        with open(traj_path, 'w') as f:
+            # We save the log for the last experiment run
+            json.dump(trajectory_logs_all_experiments, f, indent=4, cls=NumpyArrayEncoder)
+        print(f"Trajectory log saved to {traj_path}")
+    
+    # Save rewards of both players
+    print("Saving rewards of both players.")
+    np.save(os.path.join(results_path, 'rewards_p1.npy'), np.array(all_rewards_p1))
+    np.save(os.path.join(results_path, 'rewards_p2.npy'), np.array(all_rewards_p2))
+
+    
+    # Save configuration file
+    config_path = os.path.join(results_path, 'config.yaml')
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False)
+    print(f"Configuration saved to {config_path}")
     
     
     return trajectory_logs_all_experiments if log_trajectory else None
