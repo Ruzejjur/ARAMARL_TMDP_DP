@@ -1,0 +1,40 @@
+
+experiment_settings:
+  name: "Level1QAgent_vs_IQL_Softmax"
+  num_runs: 1         # How many times to repeat the experiment with different seeds
+  num_episodes: 1000 # Number of episodes per run
+  results_dir: "results/test" # Directory to save plots and data
+
+environment_settings:
+  class: "CoinGame"
+  params:
+    grid_size: 5
+    max_steps: 20000
+    push_distance: 2
+
+agent_settings:
+  player_1:
+    class: "LevelKQAgent" # The class name of the agent from your `agents` module
+    params:
+      k: 1
+      gamma: 0.95
+      learning_rate: 0.5
+      epsilon: 1.0
+    epsilon_decay:
+      type: "linear"
+      end: 0.1
+
+
+  player_2:
+    class: "IndQLearningAgentSoftmax"
+    params:
+      beta: 1.0
+      gamma: 0.95
+      learning_rate: 0.5
+      epsilon: 1.0
+    epsilon_decay:
+      type: "linear"
+      end: 0.1
+
+plotting_settings:
+  moving_average_window: 100

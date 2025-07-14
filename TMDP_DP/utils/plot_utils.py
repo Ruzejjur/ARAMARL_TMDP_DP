@@ -106,13 +106,13 @@ def animate_trajectory_from_log(trajectory_log, grid_size=4, fps=4, dpi=100):
         state = trajectory_log[frame]
 
         
-        if isinstance(state['DM_location_new'], (list, np.ndarray)) and len(state['DM_location_new']) == 2:
-            dm_dot.set_data([state['DM_location_new'][1]], [state['DM_location_new'][0]])
+        if isinstance(state['p0_loc_new'], (list, np.ndarray)) and len(state['p0_loc_new']) == 2:
+            dm_dot.set_data([state['p0_loc_new'][1]], [state['p0_loc_new'][0]])
         else:
             dm_dot.set_data([], [])
 
-        if isinstance(state['Adv_location_new'], (list, np.ndarray)) and len(state['Adv_location_new']) == 2:
-            adv_dot.set_data([state['Adv_location_new'][1]], [state['Adv_location_new'][0]])
+        if isinstance(state['p1_loc_new'], (list, np.ndarray)) and len(state['p1_loc_new']) == 2:
+            adv_dot.set_data([state['p1_loc_new'][1]], [state['p1_loc_new'][0]])
         else:
             adv_dot.set_data([], [])
 
@@ -131,28 +131,28 @@ def animate_trajectory_from_log(trajectory_log, grid_size=4, fps=4, dpi=100):
         )
         
        
-        if(np.array_equal(state['action_DM'], ["None", "None"])): 
+        if(np.array_equal(state['p0_action'], ["None", "None"])): 
             DM_action_string = ["None", "None"]
         else: 
-            DM_action_string = f"DM Action: [{move_action_codes[state['action_DM'][0]]}, {action_push_codes[state['action_DM'][1]]}]"
+            DM_action_string = f"DM Action: [{move_action_codes[state['p0_action'][0]]}, {action_push_codes[state['p0_action'][1]]}]"
             
-        if(np.array_equal(state['action_Adv'], ["None", "None"])): 
+        if(np.array_equal(state['p1_action'], ["None", "None"])): 
             Adv_action_string = ["None", "None"]
         else: 
-            Adv_action_string = f"Adv Action: [{move_action_codes[state['action_Adv'][0]]}, {action_push_codes[state['action_Adv'][1]]}]"
+            Adv_action_string = f"Adv Action: [{move_action_codes[state['p1_action'][0]]}, {action_push_codes[state['p1_action'][1]]}]"
             
         # Update a text box the grid for step and reward info
         info_text.set_text(
             (
-                f"Prev. location DM: [{state['DM_location_old'][0]}, {state['DM_location_old'][1]}]\n"
-                f"Curr. location DM: [{state['DM_location_new'][0]}, {state['DM_location_new'][1]}]\n"
+                f"Prev. location DM: [{state['p0_loc_old'][0]}, {state['p0_loc_old'][1]}]\n"
+                f"Curr. location DM: [{state['p0_loc_new'][0]}, {state['p0_loc_new'][1]}]\n"
                 f"{DM_action_string}\n"
-                f"DM reward: {state['reward_DM']}\n"
+                f"DM reward: {state['p0_reward']}\n"
                 f"\n"  # This adds a visual separation
-                f"Prev. location Adv: [{state['Adv_location_old'][0]}, {state['Adv_location_old'][1]}]\n"
-                f"Curr. location Adv: [{state['Adv_location_new'][0]}, {state['Adv_location_new'][1]}]\n"
+                f"Prev. location Adv: [{state['p1_loc_old'][0]}, {state['p1_loc_old'][1]}]\n"
+                f"Curr. location Adv: [{state['p1_loc_new'][0]}, {state['p1_loc_new'][1]}]\n"
                 f"{Adv_action_string}\n"
-                f"Adv reward: {state['reward_Adv']}"
+                f"Adv reward: {state['p1_reward']}"
             )
         )
 

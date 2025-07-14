@@ -39,7 +39,7 @@ class LevelKQAgent(LearningAgent):
         gamma (float): The discount factor for future rewards.
         action_space (np.ndarray): The set of actions available to this agent.
         opponent_action_space (np.ndarray): The set of actions available to the opponent.
-        grid_size (int): The size of one dimension of the square grid (N).
+        grid_size (int): The size of one dimension of the square grid.
         Q (np.ndarray): The agent's Q-table, with shape
                         (n_states, num_self_actions, num_opponent_actions).
         opponent (LevelKQAgent): The agent's internal model of its opponent.
@@ -86,7 +86,7 @@ class LevelKQAgent(LearningAgent):
                 opponent_action_space=self.action_space,
                 n_states=self.n_states,
                 learning_rate=self.alpha, # Using same parameters for the modeled opponent
-                epsilon=self.epsilon,
+                epsilon=0,
                 gamma=self.gamma,
                 grid_size=grid_size,
                 player_id=1-self.player_id
@@ -289,8 +289,8 @@ class LevelKQAgent(LearningAgent):
         """
         
         self.epsilon = new_epsilon
-        if self.k > 1 and self.opponent:
-            self.opponent.update_epsilon(new_epsilon)
+        # if self.k > 1 and self.opponent:
+        #     self.opponent.update_epsilon(new_epsilon)
 
 
 class LevelKQAgentSoftmax(LevelKQAgent):

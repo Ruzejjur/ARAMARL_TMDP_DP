@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.random import choice
+from tqdm.notebook import tqdm
 
 from typing import Optional
 
@@ -24,6 +25,7 @@ class IndQLearningAgent(LearningAgent):
 
     Attributes:
         n_states (int): The total number of states in the environment.
+        grid_size (int): The size of one dimension of the square grid.
         learning_rate (float): The learning rate (learning_rate) for Q-function updates.
         epsilon (float): The exploration rate for the epsilon-greedy policy.
         gamma (float): The discount factor for future rewards.
@@ -31,19 +33,77 @@ class IndQLearningAgent(LearningAgent):
         Q (np.ndarray): The agent's Q-table, with shape (n_states, num_actions).
     """
 
-    def __init__(self, action_space: np.ndarray, n_states: int, learning_rate: float,
+    def __init__(self, action_space: np.ndarray, n_states: int, grid_size: int, learning_rate: float,
                  epsilon: float, gamma: float, player_id: int):
         
         self.action_space = action_space
         self.n_states = n_states
+        self.grid_size = grid_size
         self.learning_rate = learning_rate
         self.epsilon = epsilon
         self.gamma = gamma
         self.player_id = player_id
 
-        
         # This is the Q-function Q(s, a)
-        self.Q = -10*np.ones([self.n_states, len(self.action_space)])
+        self.Q = self._setup_Q(-10)
+        
+    def _setup_Q(self,initial_value: int) -> QFunction:
+        """
+        Initializes the Q-table `Q(s, a_self, a_opponent)`.
+
+        The value of all terminal states is set to 0, as no further rewards
+        can be obtained from them.
+
+        Args:
+            initial_value (float): The initial value for all non-terminal states.
+
+        Returns:
+            np.ndarray: The initialized Q-table of shape (n_states, num_self_actions, num_opponent_actions).
+        """
+        
+        Q = np.ones([self.n_states, len(self.action_space)])*initial_value
+        
+        # tqdm shows progress bar.
+        for s in tqdm(range(self.n_states), desc="Initializing value function."):
+            if self._is_terminal_state(s):
+                Q[s,:] = 0
+                
+        return Q
+
+    def _is_terminal_state(self, obs:State) -> bool:
+        """
+        Checks if a given state is terminal.
+
+        A state is terminal if either player has collected both of their coins
+        (a win) or if all four coins have been claimed by any combination of
+        players (a draw or a win). This logic is coupled to the environment's
+        specific state encoding scheme.
+        """
+        
+        # Grid size N, base for coin collection status
+        _, base_coll = self.grid_size**2, 2
+        
+        # Radix decoding of the state integer to get coin collection status
+        state_copy = obs
+        c_r2 = bool(state_copy % base_coll)
+        state_copy //= base_coll
+        c_r1 = bool(state_copy % base_coll)
+        state_copy //= base_coll
+        c_b2 = bool(state_copy % base_coll)
+        state_copy //= base_coll
+        c_b1 = bool(state_copy % base_coll)
+
+        # Check for win conditions
+        p0_wins = c_b1 and c_b2
+        p1_wins = c_r1 and c_r2
+        
+        # Check for draw condition
+        coins_gone = (c_b1 or c_r1) and (c_b2 or c_r2)
+        is_draw = coins_gone and not p0_wins and not p1_wins
+        
+        # NOTE: The Q agent cannot account for the episode ending due to max_steps,
+        # as this is not encoded in the state itself. This is a known limitation.
+        return p0_wins or p1_wins or is_draw
 
     def act(self, obs: State, env = None) -> Action:
         """
@@ -108,10 +168,10 @@ class IndQLearningAgentSoftmax(IndQLearningAgent):
                       Higher beta leads to more deterministic (greedy) actions.
     """
     
-    def __init__(self, action_space: np.ndarray, n_states: int, learning_rate: float,
+    def __init__(self, action_space: np.ndarray, n_states: int, grid_size: int, learning_rate: float,
                  epsilon: float, gamma: float, beta: float = 1.0, player_id: int = 0):
         # Call the parent constructor
-        super().__init__(action_space, n_states, learning_rate, epsilon, gamma, player_id)
+        super().__init__(action_space, n_states, grid_size, learning_rate, epsilon, gamma, player_id)
         
         self.beta = beta
         
