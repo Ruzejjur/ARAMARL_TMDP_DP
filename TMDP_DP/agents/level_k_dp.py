@@ -392,10 +392,10 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         # Using the transition model, calculate the expected reward for each
         # *intended* action pair by marginalizing over the *executed* outcomes.
         # 'ijkl,kl->ij' sums over the last two axes (executed actions).
-        expected_self_rewards_intended = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, rewards_executed)
+        expected_self_rewards_intended = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, rewards_executed, optimize=True)
         
         # Similarly, calculate the expected future value for each *intended* action pair.
-        weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, future_V_executed)
+        weighted_sum_future_V = np.einsum('ijkl,kl->ij', self.prob_exec_tensor, future_V_executed, optimize=True)
         
         # Get the opponent's predicted policy (action probabilities) for the current state.
         opponent_policy_in_obs = self.get_opponent_policy(obs)
@@ -482,8 +482,8 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         
         # Calculate the Q-values for each of our actions 'a', given s and opponent action 'b'.
         # Q(s, a) = E_{b~pi_opp}[ R(s,a,b) + gamma * V(s') ]
-        expected_rewards_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, rewards_executed)
-        expected_future_V_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, future_V_executed)
+        expected_rewards_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, rewards_executed, optimize=True)
+        expected_future_V_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, future_V_executed, optimize=True)
         
         # The Bellman update: V(s, b) is the max Q-value over agent's actions.
         q_values_for_actions = expected_rewards_per_action + self.gamma * expected_future_V_per_action

@@ -164,8 +164,8 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
                     prob_exec_tensor_fixed_opp_action = self.prob_exec_tensor[:, opponent_action, :, :]
                     
                     # Calculate expected rewards and future values for each of agents INTENDED actions.
-                    expected_rewards_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, rewards_executed)
-                    expected_future_V_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, future_V_values_executed)
+                    expected_rewards_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, rewards_executed, optimize=True)
+                    expected_future_V_per_action = np.einsum('ikl,kl->i', prob_exec_tensor_fixed_opp_action, future_V_values_executed, optimize=True)
                     
                     # Q(s, a | b) = E[R(s,a,b)] + gamma * E[V(s')]
                     q_values_for_actions = expected_rewards_per_action + self.gamma * expected_future_V_per_action
