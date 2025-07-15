@@ -38,6 +38,8 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
                                            storing the opponent's fixed policy.
         optim_policy_table (np.ndarray): A table of shape (n_states,) storing the
                                          final, optimal action for each state.
+                                         
+        For other atribute description check parent.
     """
     def __init__(self, action_space: np.ndarray, opponent_action_space: np.ndarray, n_states: int, gamma: float, initial_V_value: float, player_id: int,
                  termination_criterion: float, value_iteration_max_num_of_iter: int, env, opponent: ManhattanAgent):
@@ -46,7 +48,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         # k=1 is sufficient as we are pre-solving the optimal policy.
         # epsilon=0 is used because the final policy will be purely deterministic
         # and there is no exploration during online interaction.
-        super().__init__(k=1, action_space=action_space, opponent_action_space=opponent_action_space,
+        super().__init__(k=1, action_space=action_space, opponent_action_space=opponent_action_space, lower_level_k_epsilon=0,
                          n_states=n_states, epsilon=0, gamma=gamma, initial_V_value=initial_V_value,
                          player_id=player_id, env=env)
 

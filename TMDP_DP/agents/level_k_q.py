@@ -39,6 +39,7 @@ class LevelKQAgent(LearningAgent):
         gamma (float): The discount factor for future rewards.
         action_space (np.ndarray): The set of actions available to this agent.
         opponent_action_space (np.ndarray): The set of actions available to the opponent.
+        lower_level_k_epsilon(float): The exploration rate embeded into lower levels of the k-level hierarchy.
         grid_size (int): The size of one dimension of the square grid.
         Q (np.ndarray): The agent's Q-table, with shape
                         (n_states, num_self_actions, num_opponent_actions).
@@ -47,7 +48,7 @@ class LevelKQAgent(LearningAgent):
         dirichlet_counts (np.ndarray): Dirichlet counts for modeling a Level-0
                                        opponent's policy. Used only by Level-1 agents.
     """
-    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
+    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,lower_level_k_epsilon: float,
                  n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, initial_Q_value: float, player_id: int):
         if k < 1:
             raise ValueError("Level k must be a positive integer.")
@@ -61,6 +62,7 @@ class LevelKQAgent(LearningAgent):
         self.gamma = gamma
         self.initial_Q_value = initial_Q_value
         self.opponent_action_space = opponent_action_space
+        self.lower_level_k_epsilon=lower_level_k_epsilon
         self.grid_size = grid_size
         self.player_id = player_id
         
@@ -85,6 +87,7 @@ class LevelKQAgent(LearningAgent):
                 k=self.k - 1,
                 action_space=self.opponent_action_space, # Swapping actions space and opponent action space
                 opponent_action_space=self.action_space,
+                lower_level_k_epsilon=self.lower_level_k_epsilon,
                 n_states=self.n_states,
                 learning_rate=self.alpha, # Using same parameters for the modeled opponent
                 epsilon=self.epsilon,
@@ -94,7 +97,7 @@ class LevelKQAgent(LearningAgent):
                 player_id=1-self.player_id
             )
             
-    def _setup_Q(self,initial_value: float) -> QFunction:
+    def _setup_Q(self,initial_Q_value: float) -> QFunction:
         """
         Initializes the Q-table `Q(s, a_self, a_opponent)`.
 
@@ -102,13 +105,13 @@ class LevelKQAgent(LearningAgent):
         can be obtained from them.
 
         Args:
-            initial_value (float): The initial value for all non-terminal states.
+            initial_Q_value (float): The initial value for all non-terminal states.
 
         Returns:
             np.ndarray: The initialized Q-table of shape (n_states, num_self_actions, num_opponent_actions).
         """
         
-        Q = np.ones([self.n_states, len(self.action_space), len(self.opponent_action_space)])*initial_value
+        Q = np.ones([self.n_states, len(self.action_space), len(self.opponent_action_space)])*initial_Q_value
         
         # tqdm shows progress bar.
         for s in tqdm(range(self.n_states), desc="Initializing value function."):
@@ -304,11 +307,11 @@ class LevelKQAgentSoftmax(LevelKQAgent):
         beta (float): The temperature parameter for the softmax calculation.
                       Higher beta leads to more deterministic (greedy) actions.
     """
-    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
+    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon: float,
                  n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, initial_Q_value: float, beta: float, player_id: int):
         
         # Call the parent class constructor to handle all common setup.
-        super().__init__(k, action_space, opponent_action_space, n_states, grid_size, learning_rate, epsilon, gamma, initial_Q_value, player_id)
+        super().__init__(k, action_space, opponent_action_space, lower_level_k_epsilon, n_states, grid_size, learning_rate, epsilon, gamma, initial_Q_value, player_id)
         
         self.beta = beta
 
@@ -319,6 +322,7 @@ class LevelKQAgentSoftmax(LevelKQAgent):
                 k=self.k - 1,
                 action_space=self.opponent_action_space,
                 opponent_action_space=self.action_space,
+                lower_level_k_epsilon=self.lower_level_k_epsilon,
                 n_states=self.n_states,
                 grid_size=self.grid_size,  
                 learning_rate=self.alpha,

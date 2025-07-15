@@ -32,6 +32,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         player_id (int): The agent's identifier (0, 1).
         action_space (np.ndarray): The set of actions available to this agent.
         opponent_action_space (np.ndarray): The set of actions available to the opponent.
+        lower_level_k_epsilon(float): The exploration rate embeded into lower levels of the k-level hierarchy.
         env_snapshot (CoinGame): A deep copy of the environment, set to be deterministic.
                                  Used for simulating outcomes to build the model.
         V (ValueFunction): The agent's value function table, representing
@@ -51,7 +52,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         dirichlet_counts (np.ndarray): Dirichlet counts for modeling a Level-0
                                        opponent's policy. Initialized in subclasses that require it (k=1).
     """
-    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
+    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon:float,
                  n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
         
         # --- Core Agent Parameters ---
@@ -63,6 +64,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         self.player_id = player_id
         self.action_space = action_space
         self.opponent_action_space = opponent_action_space
+        self.lower_level_k_epsilon = lower_level_k_epsilon
         
         # --- Environment Snapshot for Model Computation ---
         # Create a deterministic copy of the environment. This allows
@@ -267,15 +269,18 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
 
     - A Level-1 agent models its opponent as Level-0 (uniformly random policy).
     - A Level-k agent (k>1) models its opponent as a Level-(k-1) agent.
+    
+    Attributes: 
+        Check parent
     """
 
-    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
+    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon:float,
                  n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
         if k < 1:
             raise ValueError("Level k must be a positive integer.")
 
         # Call the base class constructor to handle all common setup.
-        super().__init__(k, action_space, opponent_action_space, n_states, 
+        super().__init__(k, action_space, opponent_action_space, lower_level_k_epsilon, n_states, 
                          epsilon, gamma, initial_V_value, player_id, env)
         
         # Pre-calculate the state-independent execution probability tensor:
@@ -295,8 +300,9 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
                 k=self.k - 1,
                 action_space=self.opponent_action_space,
                 opponent_action_space=self.action_space,
+                lower_level_k_epsilon=self.lower_level_k_epsilon,
                 n_states=self.n_states,
-                epsilon=self.epsilon,
+                epsilon=self.lower_level_k_epsilon,
                 gamma=self.gamma,
                 initial_V_value = self.initial_V_value,
                 player_id=1 - self.player_id,
@@ -541,11 +547,11 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
     Attributes: 
         Check parent
     """
-    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
+    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon:float,
                  n_states: int, epsilon: float, gamma: float, initial_V_value:float, player_id: int, env):
         
         # Call the parent class constructor to handle all common setup.
-        super().__init__(k, action_space, opponent_action_space, n_states, epsilon, gamma, initial_V_value, player_id, env)
+        super().__init__(k, action_space, opponent_action_space, lower_level_k_epsilon, n_states, epsilon, gamma, initial_V_value, player_id, env)
 
         # Initialize the k-level cognitive hierarchy with NonStationary agents.
         if self.k == 1:
@@ -560,8 +566,9 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
                 k=self.k - 1,
                 action_space=self.opponent_action_space,
                 opponent_action_space=self.action_space,
+                lower_level_k_epsilon=self.lower_level_k_epsilon,
                 n_states=self.n_states,
-                epsilon=self.epsilon,
+                epsilon=self.lower_level_k_epsilon,
                 gamma=self.gamma,
                 initial_V_value=self.initial_V_value,
                 player_id=1 - self.player_id,
@@ -609,11 +616,11 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
     environments with unknown transition dynamics.
     """
     
-    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
+    def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon: float,
                  n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
 
         # Call the parent class constructor to handle all common setup.
-        super().__init__(k, action_space, opponent_action_space, n_states, 
+        super().__init__(k, action_space, opponent_action_space, lower_level_k_epsilon, n_states, 
                          epsilon, gamma, initial_V_value, player_id, env)
         
         # --- Dynamic-Specific Initialization ---
@@ -640,8 +647,9 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
                 k=self.k - 1,
                 action_space=self.opponent_action_space,
                 opponent_action_space=self.action_space, 
+                lower_level_k_epsilon=self.lower_level_k_epsilon,
                 n_states=self.n_states,
-                epsilon=self.epsilon,
+                epsilon=self.lower_level_k_epsilon,
                 gamma=self.gamma,
                 initial_V_value=self.initial_V_value,
                 player_id=1 - self.player_id,

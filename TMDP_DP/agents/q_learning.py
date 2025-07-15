@@ -34,7 +34,7 @@ class IndQLearningAgent(LearningAgent):
     """
 
     def __init__(self, action_space: np.ndarray, n_states: int, grid_size: int, learning_rate: float,
-                 epsilon: float, gamma: float, player_id: int):
+                 epsilon: float, gamma: float, initial_Q_value: float, player_id: int):
         
         self.action_space = action_space
         self.n_states = n_states
@@ -42,12 +42,13 @@ class IndQLearningAgent(LearningAgent):
         self.learning_rate = learning_rate
         self.epsilon = epsilon
         self.gamma = gamma
+        self.initial_Q_value = initial_Q_value
         self.player_id = player_id
 
         # This is the Q-function Q(s, a)
-        self.Q = self._setup_Q(-10)
+        self.Q = self._setup_Q(self.initial_Q_value)
         
-    def _setup_Q(self,initial_value: int) -> QFunction:
+    def _setup_Q(self,initial_Q_value: float) -> QFunction:
         """
         Initializes the Q-table `Q(s, a_self, a_opponent)`.
 
@@ -55,13 +56,13 @@ class IndQLearningAgent(LearningAgent):
         can be obtained from them.
 
         Args:
-            initial_value (float): The initial value for all non-terminal states.
+            initial_Q_value (float): The initial value for all non-terminal states.
 
         Returns:
             np.ndarray: The initialized Q-table of shape (n_states, num_self_actions, num_opponent_actions).
         """
         
-        Q = np.ones([self.n_states, len(self.action_space)])*initial_value
+        Q = np.ones([self.n_states, len(self.action_space)])*initial_Q_value
         
         # tqdm shows progress bar.
         for s in tqdm(range(self.n_states), desc="Initializing value function."):
@@ -169,9 +170,9 @@ class IndQLearningAgentSoftmax(IndQLearningAgent):
     """
     
     def __init__(self, action_space: np.ndarray, n_states: int, grid_size: int, learning_rate: float,
-                 epsilon: float, gamma: float, beta: float = 1.0, player_id: int = 0):
+                 epsilon: float, gamma: float, initial_Q_value: float, beta: float = 1.0, player_id: int = 0):
         # Call the parent constructor
-        super().__init__(action_space, n_states, grid_size, learning_rate, epsilon, gamma, player_id)
+        super().__init__(action_space, n_states, grid_size, learning_rate, epsilon, gamma, initial_Q_value, player_id)
         
         self.beta = beta
         
