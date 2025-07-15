@@ -52,13 +52,14 @@ class _BaseLevelKDPAgent(LearningAgent):
                                        opponent's policy. Initialized in subclasses that require it (k=1).
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, epsilon: float, gamma: float, player_id: int, env):
+                 n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
         
         # --- Core Agent Parameters ---
         self.k = k
         self.n_states = n_states
         self.epsilon = epsilon
         self.gamma = gamma
+        self.initial_V_value = initial_V_value
         self.player_id = player_id
         self.action_space = action_space
         self.opponent_action_space = opponent_action_space
@@ -84,7 +85,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         # --- Value Function and Model Initialization ---
         # V(s, opponent_action): The value of being in state 's' *after* 
         # the opponent has committed to taking 'opponent_action'.
-        self.V = self._setup_value_function(0)
+        self.V = self._setup_value_function(self.initial_V_value)
             
         # Pre-compute (s, a_self_executed, a_opp_executed) -> (s', r) lookup tables.
         # These tensors store the outcomes for every state and *executed* action pair
@@ -99,7 +100,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         self.prob_exec_tensor = None
         
         
-    def _setup_value_function(self, initial_value: float) -> ValueFunction:
+    def _setup_value_function(self, initial_V_value: float) -> ValueFunction:
         """
         Initializes the value function V(s, opponent_action).
 
@@ -107,14 +108,14 @@ class _BaseLevelKDPAgent(LearningAgent):
         can be obtained from them.
 
         Args:
-            initial_value (float): The initial value for all non-terminal states.
+            initial_V_value (float): The initial value for all non-terminal states.
 
         Returns:
             np.ndarray: The initialized value function table of shape
                         (n_states, num_opponent_actions).
         """
         
-        V = np.ones([self.n_states, len(self.opponent_action_space)])*initial_value
+        V = np.ones([self.n_states, len(self.opponent_action_space)])*initial_V_value
         
         # tqdm shows progress bar.
         for s in tqdm(range(self.n_states), desc="Initializing value function."):
@@ -269,13 +270,13 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
     """
 
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, epsilon: float, gamma: float, player_id: int, env):
+                 n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
         if k < 1:
             raise ValueError("Level k must be a positive integer.")
 
         # Call the base class constructor to handle all common setup.
         super().__init__(k, action_space, opponent_action_space, n_states, 
-                         epsilon, gamma, player_id, env)
+                         epsilon, gamma, initial_V_value, player_id, env)
         
         # Pre-calculate the state-independent execution probability tensor:
         # P(a_self_exec, a_opp_exec | a_self_intend, a_opp_intend)
@@ -297,6 +298,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
                 n_states=self.n_states,
                 epsilon=self.epsilon,
                 gamma=self.gamma,
+                initial_V_value = self.initial_V_value,
                 player_id=1 - self.player_id,
                 env=env
             )
@@ -540,10 +542,10 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
         Check parent
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, epsilon: float, gamma: float, player_id: int, env):
+                 n_states: int, epsilon: float, gamma: float, initial_V_value:float, player_id: int, env):
         
         # Call the parent class constructor to handle all common setup.
-        super().__init__(k, action_space, opponent_action_space, n_states, epsilon, gamma, player_id, env)
+        super().__init__(k, action_space, opponent_action_space, n_states, epsilon, gamma, initial_V_value, player_id, env)
 
         # Initialize the k-level cognitive hierarchy with NonStationary agents.
         if self.k == 1:
@@ -561,6 +563,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
                 n_states=self.n_states,
                 epsilon=self.epsilon,
                 gamma=self.gamma,
+                initial_V_value=self.initial_V_value,
                 player_id=1 - self.player_id,
                 env=env
             )
@@ -607,11 +610,11 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
     """
     
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, epsilon: float, gamma: float, player_id: int, env):
+                 n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
 
         # Call the parent class constructor to handle all common setup.
         super().__init__(k, action_space, opponent_action_space, n_states, 
-                         epsilon, gamma, player_id, env)
+                         epsilon, gamma, initial_V_value, player_id, env)
         
         # --- Dynamic-Specific Initialization ---
         # `prob_exec_tensor` is not fixed; it will be calculated on-the-fly for each state.
@@ -640,6 +643,7 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
                 n_states=self.n_states,
                 epsilon=self.epsilon,
                 gamma=self.gamma,
+                initial_V_value=self.initial_V_value,
                 player_id=1 - self.player_id,
                 env=env
             )

@@ -5,6 +5,7 @@ from tqdm.notebook import tqdm
 from typing import Optional
 
 from .level_k_dp import LevelKDPAgent_Stationary
+from .heuristic import ManhattanAgent
 
 # --- Type Aliases for Readability ---
 State = int
@@ -38,15 +39,21 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         optim_policy_table (np.ndarray): A table of shape (n_states,) storing the
                                          final, optimal action for each state.
     """
-    def __init__(self, action_space: np.ndarray, opponent_action_space: np.ndarray, n_states: int, gamma: float, player_id: int, env, opponent):
+    def __init__(self, action_space: np.ndarray, opponent_action_space: np.ndarray, n_states: int, gamma: float, initial_V_value: float, player_id: int,
+                 termination_criterion: float, value_iteration_max_num_of_iter: int, env, opponent: ManhattanAgent):
         # Initialize as a Level-1 DP Agent to leverage its pre-computation,
         # lookup tables, and vectorized calculation methods.
         # k=1 is sufficient as we are pre-solving the optimal policy.
         # epsilon=0 is used because the final policy will be purely deterministic
         # and there is no exploration during online interaction.
         super().__init__(k=1, action_space=action_space, opponent_action_space=opponent_action_space,
-                         n_states=n_states, epsilon=0, gamma=gamma, player_id=player_id, env=env)
+                         n_states=n_states, epsilon=0, gamma=gamma, initial_V_value=initial_V_value,
+                         player_id=player_id, env=env)
 
+        # Agent specific initialisation
+        self.termination_criterion = termination_criterion
+        self.value_iteration_max_num_of_iter = value_iteration_max_num_of_iter
+        
         # Store a deep copy of the fixed opponent we are solving against.
         self.opponent = copy.deepcopy(opponent)
 
@@ -60,7 +67,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         self.optim_policy_table = np.zeros(self.n_states, dtype=int)
 
         # Run value iteration to find the optimal value function V*(s, b).
-        self.run_value_iteration()
+        self.run_value_iteration(termination_criterion=self.termination_criterion, value_iteration_max_num_of_iter=self.value_iteration_max_num_of_iter)
         # Extract the final deterministic policy from the converged V-function.
         self.extract_optimal_policy()
         
@@ -111,7 +118,7 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         """
         return self.opponent_policy_table[obs]
 
-    def run_value_iteration(self, theta: float = 1e-2, max_iters: int = 10000):
+    def run_value_iteration(self, termination_criterion: float, value_iteration_max_num_of_iter: int):
         """
         Performs offline, in-place (asynchronous) value iteration on the V(s, b)
         table until convergence.
@@ -120,13 +127,13 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         more memory-efficient than creating a new copy of V for each iteration.
 
         Args:
-            theta (float): The convergence threshold. Iteration stops when the
-                           maximum change in the value function is less than theta.
-            max_iters (int): The maximum number of iterations to perform.
+            termination_criterion (float): The convergence threshold. Iteration stops when the
+                           maximum change in the value function is less than termination_criterion.
+            value_iteration_max_num_of_iter (int): The maximum number of iterations to perform.
         """
         print("Starting offline in-place value iteration on V(s, b)...")
         
-        progress_bar = tqdm(range(max_iters), desc="Value Iteration", unit="it")
+        progress_bar = tqdm(range(value_iteration_max_num_of_iter), desc="Value Iteration", unit="it")
         
         for i in progress_bar:
             delta = 0  # Tracks the maximum change in V(s,b) during a sweep.
@@ -169,14 +176,14 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
                     delta = max(delta, np.abs(v_s_b_new - v_s_b_old))
                     
             # Update the progress bar with the current delta.       
-            progress_bar.set_postfix(delta=f"{delta:.6f}/{theta:.4f}", refresh=True)
+            progress_bar.set_postfix(delta=f"{delta:.6f}/{termination_criterion:.4f}", refresh=True)
             
             # --- Convergence Check ---
-            if delta < theta:
+            if delta < termination_criterion:
                 print(f"\nValue iteration converged after {i + 1} iterations.")
                 return
 
-        print(f"Value iteration did not converge after {max_iters} iterations.")
+        print(f"Value iteration did not converge after {value_iteration_max_num_of_iter} iterations.")
 
 
     def extract_optimal_policy(self):

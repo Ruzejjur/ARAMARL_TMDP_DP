@@ -48,7 +48,7 @@ class LevelKQAgent(LearningAgent):
                                        opponent's policy. Used only by Level-1 agents.
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, player_id: int):
+                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, initial_Q_value: float, player_id: int):
         if k < 1:
             raise ValueError("Level k must be a positive integer.")
 
@@ -59,13 +59,14 @@ class LevelKQAgent(LearningAgent):
         self.alpha = learning_rate
         self.epsilon = epsilon
         self.gamma = gamma
+        self.initial_Q_value = initial_Q_value
         self.opponent_action_space = opponent_action_space
         self.grid_size = grid_size
         self.player_id = player_id
         
 
         # Q-function Q(s, a_self, a_opponent) setup
-        self.Q = self._setup_Q(-10)
+        self.Q = self._setup_Q(self.initial_Q_value)
 
         # --- Level-Specific Opponent Model Initialization ---
         self.opponent = None
@@ -88,11 +89,12 @@ class LevelKQAgent(LearningAgent):
                 learning_rate=self.alpha, # Using same parameters for the modeled opponent
                 epsilon=self.epsilon,
                 gamma=self.gamma,
+                initial_Q_value = self.initial_Q_value,
                 grid_size=grid_size,
                 player_id=1-self.player_id
             )
             
-    def _setup_Q(self,initial_value: int) -> QFunction:
+    def _setup_Q(self,initial_value: float) -> QFunction:
         """
         Initializes the Q-table `Q(s, a_self, a_opponent)`.
 
@@ -303,10 +305,10 @@ class LevelKQAgentSoftmax(LevelKQAgent):
                       Higher beta leads to more deterministic (greedy) actions.
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray,
-                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, beta: float, player_id: int):
+                 n_states: int, grid_size: int, learning_rate: float, epsilon: float, gamma: float, initial_Q_value: float, beta: float, player_id: int):
         
         # Call the parent class constructor to handle all common setup.
-        super().__init__(k, action_space, opponent_action_space, n_states, grid_size, learning_rate, epsilon, gamma, player_id)
+        super().__init__(k, action_space, opponent_action_space, n_states, grid_size, learning_rate, epsilon, gamma, initial_Q_value, player_id)
         
         self.beta = beta
 
@@ -322,6 +324,7 @@ class LevelKQAgentSoftmax(LevelKQAgent):
                 learning_rate=self.alpha,
                 epsilon=self.epsilon,
                 gamma=self.gamma,
+                initial_Q_value=self.initial_Q_value,
                 beta=self.beta,
                 player_id=1-self.player_id
             )
