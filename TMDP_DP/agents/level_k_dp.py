@@ -1,8 +1,9 @@
 import numpy as np
 from numpy.random import choice
 import copy
-from typing import cast
+from typing import cast, Optional
 from tqdm.notebook import tqdm
+
 
 from .base import LearningAgent
 
@@ -244,19 +245,20 @@ class _BaseLevelKDPAgent(LearningAgent):
         self.env_snapshot.coin0_available = not (c_b1 or c_r1)
         self.env_snapshot.coin1_available = not (c_b2 or c_r2)
     
-    def update_epsilon(self, new_epsilon: float):
+    def update_epsilon(self, new_epsilon_agent: float, new_epsilon_lower_k_level: Optional[float]):
         """
         Updates the exploration rate for this agent and its recursive opponent model.
         This ensures that if the exploration schedule changes, the change
         propagates down the entire cognitive hierarchy.
         
         Args:
-            new_epsilon (float): The new exploration rate.
+            new_epsilon_agent (float): The new exploration rate for agent.
+            new_epsilon_lower_k_level (float): The new exploration rate for agents internal model of the opponent reasoning (k-1 levels)
         """
         
-        self.epsilon = new_epsilon
+        self.epsilon = new_epsilon_agent
         if self.k > 1 and self.opponent:
-            self.opponent.update_epsilon(new_epsilon)
+            self.opponent.update_epsilon(new_epsilon_lower_k_level, new_epsilon_lower_k_level)
     
 class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
     """

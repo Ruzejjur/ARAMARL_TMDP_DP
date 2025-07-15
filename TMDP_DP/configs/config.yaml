@@ -20,7 +20,11 @@ agent_settings:
       gamma: 0.95
       learning_rate: 0.5
       epsilon: 1.0
-    epsilon_decay:
+      epsilon_lower_k_levels: 0.1
+    epsilon_decay_agent:
+      type: "linear"
+      end: 0.1
+    epsilon_decay_inernal_opponent_model:
       type: "linear"
       end: 0.1
 

@@ -97,7 +97,7 @@ def create_agent(agent_config: dict, common_params: dict) -> agents.BaseAgent:
         )
         
     # Filter the provided parameters to only include those expected by the constructor.
-    # This prevents errors from passing unexpected arguments (e.g., 'epsilon_decay').
+    # This prevents errors from passing unexpected arguments (e.g., 'epsilon_decay_agent').
     valid_params = {k: v for k, v in full_params.items() if k in sig.parameters}
     
     return AgentClass(**valid_params)
@@ -225,14 +225,26 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
     # Initialize the single environment instance.
     env = CoinGame(**env_settings['params'])
     
-    # Setup Epsilon Decay Schedules for both players if they are learning agents.
+    # Setup Agent Epsilon Decay Schedules for both players if they are learning agents.
     n_episodes = exp_settings['num_episodes']
     
-    epsilon_config_p1 = agent_configs['player_1']["params"]
-    epsilon_schedule_p1 = linear_epsilon_decay(epsilon_config_p1['epsilon'], agent_configs['player_1']['epsilon_decay']['end'], n_episodes)
+    epsilon_agent_config_p1 = agent_configs['player_1']["params"]
+    epsilon_agent_schedule_p1 = linear_epsilon_decay(epsilon_agent_config_p1['epsilon'],
+                                                     agent_configs['player_1']['epsilon_decay_agent']['end'], n_episodes)
     
-    epsilon_config_p2 = agent_configs['player_2']['params']
-    epsilon_schedule_p2 = linear_epsilon_decay(epsilon_config_p2['epsilon'], agent_configs['player_2']['epsilon_decay']['end'], n_episodes)
+    epsilon_agent_config_p2 = agent_configs['player_2']['params']
+    epsilon_agent_schedule_p2 = linear_epsilon_decay(epsilon_agent_config_p2['epsilon'],
+                                                     agent_configs['player_2']['epsilon_decay_agent']['end'], n_episodes)
+    
+    # Setup Lower K level Epsilon Decay Schedules for both players if they implement k-level hierarchy.
+    
+    epsilon_lower_k_level_config_p1 = agent_configs['player_1']["params"]
+    epsilon_lower_k_level_schedule_p1 = linear_epsilon_decay(epsilon_lower_k_level_config_p1['epsilon_lower_k_levels'],
+                                                             agent_configs['player_1']['epsilon_decay_inernal_opponent_model']['end'], n_episodes)
+    
+    epsilon_lower_k_level_config_p2 = agent_configs['player_2']['params']
+    epsilon_lower_k_level_schedule_p2 = linear_epsilon_decay(epsilon_lower_k_level_config_p2['epsilon_lower_k_levels'],
+                                                             agent_configs['player_2']['epsilon_decay_inernal_opponent_model']['end'], n_episodes)
             
     # --- Data Logging Initialisation ---
     all_rewards_p1 = []
@@ -282,15 +294,18 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
             run_rewards_p1.append(rew1)
             run_rewards_p2.append(rew2)
             
-            # Extract new epsilon from schedule
-            new_epsilon_p1 = epsilon_schedule_p1[episode_num]
-            new_epsilon_p2 = epsilon_schedule_p2[episode_num]
+            # Extract new epsilon from schedules for agent and internal agent model
+            new_epsilon_agent_p1 = epsilon_agent_schedule_p1[episode_num]
+            new_epsilon_agent_p2 = epsilon_agent_schedule_p1[episode_num]
+            
+            new_epsilon_lower_k_p1 = epsilon_lower_k_level_schedule_p1[episode_num]
+            new_epsilon_lower_k_p2 = epsilon_lower_k_level_schedule_p2[episode_num]
             
             # Update epsilon for learning agents.
             if isinstance(p1, agents.LearningAgent):
-                p1.update_epsilon(new_epsilon_p1)
+                p1.update_epsilon(new_epsilon_agent_p1, new_epsilon_lower_k_p1)
             if isinstance(p2, agents.LearningAgent):
-                p2.update_epsilon(new_epsilon_p2)
+                p2.update_epsilon(new_epsilon_agent_p2, new_epsilon_lower_k_p2)
             
         if log_trajectory:
             # Append the trajectory logs of this experiment to the total logs

@@ -42,6 +42,6 @@ class LearningAgent(BaseAgent):
         pass
     
     @abstractmethod
-    def update_epsilon(self, new_epsilon: float):
+    def update_epsilon(self, new_epsilon_agent: float, new_epsilon_lower_k_level: Optional[float]):
         """Updates the agent's exploration parameter."""
         pass

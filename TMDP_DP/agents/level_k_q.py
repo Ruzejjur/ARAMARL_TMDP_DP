@@ -283,19 +283,20 @@ class LevelKQAgent(LearningAgent):
         current_q = self.Q[obs, self_action, opponent_action]
         self.Q[obs, self_action, opponent_action] = (1 - self.alpha) * current_q + self.alpha * (self_reward + self.gamma * max_q_new)
         
-    def update_epsilon(self, new_epsilon: float):
+    def update_epsilon(self, new_epsilon_agent: float, new_epsilon_lower_k_level: Optional[float]):
         """
         Updates the exploration rate for this agent and its recursive opponent model.
         This ensures that if the exploration schedule changes, the change
         propagates down the entire cognitive hierarchy.
         
         Args:
-            new_epsilon (float): The new exploration rate.
+            new_epsilon_agent (float): The new exploration rate for agent.
+            new_epsilon_lower_k_level (float): The new exploration rate for agents internal model of the opponent reasoning (k-1 levels)
         """
         
-        self.epsilon = new_epsilon
+        self.epsilon = new_epsilon_agent
         if self.k > 1 and self.opponent:
-            self.opponent.update_epsilon(new_epsilon)
+            self.opponent.update_epsilon(new_epsilon_lower_k_level, new_epsilon_lower_k_level)
 
 
 class LevelKQAgentSoftmax(LevelKQAgent):

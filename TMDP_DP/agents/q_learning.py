@@ -147,14 +147,14 @@ class IndQLearningAgent(LearningAgent):
         self.Q[obs, self_action] = (1 - self.learning_rate)*self.Q[obs, self_action] + self.learning_rate*(self_reward + self.gamma*np.max(self.Q[new_obs, :]))
         
     
-    def update_epsilon(self, new_epsilon: float):
+    def update_epsilon(self, new_epsilon_agent: float, new_epsilon_lower_k_level: Optional[float]):
         """
         Updates the agent's exploration rate (epsilon).
 
         Args:
             new_epsilon (float): The new exploration rate.
         """
-        self.epsilon = new_epsilon
+        self.epsilon = new_epsilon_agent
         
 class IndQLearningAgentSoftmax(IndQLearningAgent):
     """
