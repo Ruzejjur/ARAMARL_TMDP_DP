@@ -2,7 +2,7 @@
 experiment_settings:
   name: "Level1QAgent_vs_IQL_Softmax"
   num_runs: 3       # How many times to repeat the experiment with different seeds
-  num_episodes: 10000 # Number of episodes per run
+  num_episodes: 1000 # Number of episodes per run
   results_dir: "results/" # Directory to save plots and data
 
 environment_settings:
@@ -20,7 +20,8 @@ agent_settings:
       gamma: 0.95
       learning_rate: 0.5
       epsilon: 1.0
-      epsilon_lower_k_levels: 0.1
+      lower_level_k_epsilon: 1.0
+      initial_Q_value: 0.0
     epsilon_decay_agent:
       type: "linear"
       end: 0.1
@@ -36,7 +37,9 @@ agent_settings:
       gamma: 0.95
       learning_rate: 0.5
       epsilon: 1.0
-    epsilon_decay:
+      lower_level_k_epsilon: 1.0
+      initial_Q_value: 0.0
+    epsilon_decay_agent:
       type: "linear"
       end: 0.1
 

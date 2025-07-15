@@ -224,27 +224,62 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
     
     # Initialize the single environment instance.
     env = CoinGame(**env_settings['params'])
-    
-    # Setup Agent Epsilon Decay Schedules for both players if they are learning agents.
     n_episodes = exp_settings['num_episodes']
     
-    epsilon_agent_config_p1 = agent_configs['player_1']["params"]
-    epsilon_agent_schedule_p1 = linear_epsilon_decay(epsilon_agent_config_p1['epsilon'],
-                                                     agent_configs['player_1']['epsilon_decay_agent']['end'], n_episodes)
-    
-    epsilon_agent_config_p2 = agent_configs['player_2']['params']
-    epsilon_agent_schedule_p2 = linear_epsilon_decay(epsilon_agent_config_p2['epsilon'],
-                                                     agent_configs['player_2']['epsilon_decay_agent']['end'], n_episodes)
-    
-    # Setup Lower K level Epsilon Decay Schedules for both players if they implement k-level hierarchy.
-    
-    epsilon_lower_k_level_config_p1 = agent_configs['player_1']["params"]
-    epsilon_lower_k_level_schedule_p1 = linear_epsilon_decay(epsilon_lower_k_level_config_p1['epsilon_lower_k_levels'],
-                                                             agent_configs['player_1']['epsilon_decay_inernal_opponent_model']['end'], n_episodes)
-    
-    epsilon_lower_k_level_config_p2 = agent_configs['player_2']['params']
-    epsilon_lower_k_level_schedule_p2 = linear_epsilon_decay(epsilon_lower_k_level_config_p2['epsilon_lower_k_levels'],
-                                                             agent_configs['player_2']['epsilon_decay_inernal_opponent_model']['end'], n_episodes)
+    # --- Conditional Epsilon Decay Schedule Setup ---
+    # Initialize all schedules to None. They will only be created if the
+    # corresponding configuration section exists for the agent.
+
+    epsilon_agent_schedule_p1 = None
+    epsilon_agent_schedule_p2 = None
+    epsilon_lower_k_level_schedule_p1 = None
+    epsilon_lower_k_level_schedule_p2 = None
+
+    # Player 1 Schedules
+    if 'epsilon_decay_agent' in agent_configs['player_1']:
+        try:
+            p1_decay_config = agent_configs['player_1']['epsilon_decay_agent']
+            p1_params_config = agent_configs['player_1']['params']
+            if p1_decay_config.get('type') == 'linear':
+                epsilon_agent_schedule_p1 = linear_epsilon_decay(
+                    p1_params_config['epsilon'], p1_decay_config['end'], n_episodes
+                )
+        except KeyError as e:
+            raise KeyError(f"Missing key {e} in 'epsilon_decay_agent' or 'params' for player_1.")
+
+    if 'epsilon_decay_inernal_opponent_model' in agent_configs['player_1']:
+        try:
+            p1_internal_decay_config = agent_configs['player_1']['epsilon_decay_inernal_opponent_model']
+            p1_params_config = agent_configs['player_1']['params']
+            if p1_internal_decay_config.get('type') == 'linear':
+                epsilon_lower_k_level_schedule_p1 = linear_epsilon_decay(
+                    p1_params_config['lower_level_k_epsilon'], p1_internal_decay_config['end'], n_episodes
+                )
+        except KeyError as e:
+            raise KeyError(f"Missing key {e} in 'epsilon_decay_inernal_opponent_model' or 'params' for player_1.")
+
+    # Player 2 Schedules
+    if 'epsilon_decay_agent' in agent_configs['player_2']:
+        try:
+            p2_decay_config = agent_configs['player_2']['epsilon_decay_agent']
+            p2_params_config = agent_configs['player_2']['params']
+            if p2_decay_config.get('type') == 'linear':
+                epsilon_agent_schedule_p2 = linear_epsilon_decay(
+                    p2_params_config['epsilon'], p2_decay_config['end'], n_episodes
+                )
+        except KeyError as e:
+            raise KeyError(f"Missing key {e} in 'epsilon_decay_agent' or 'params' for player_2.")
+
+    if 'epsilon_decay_inernal_opponent_model' in agent_configs['player_2']:
+        try:
+            p2_internal_decay_config = agent_configs['player_2']['epsilon_decay_inernal_opponent_model']
+            p2_params_config = agent_configs['player_2']['params']
+            if p2_internal_decay_config.get('type') == 'linear':
+                epsilon_lower_k_level_schedule_p2 = linear_epsilon_decay(
+                    p2_params_config['lower_level_k_epsilon'], p2_internal_decay_config['end'], n_episodes
+                )
+        except KeyError as e:
+            raise KeyError(f"Missing key {e} in 'epsilon_decay_inernal_opponent_model' or 'params' for player_2.")
             
     # --- Data Logging Initialisation ---
     all_rewards_p1 = []
@@ -294,17 +329,31 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
             run_rewards_p1.append(rew1)
             run_rewards_p2.append(rew2)
             
-            # Extract new epsilon from schedules for agent and internal agent model
-            new_epsilon_agent_p1 = epsilon_agent_schedule_p1[episode_num]
-            new_epsilon_agent_p2 = epsilon_agent_schedule_p1[episode_num]
+            #Update epsilon for agent and possible lower k-level models
             
-            new_epsilon_lower_k_p1 = epsilon_lower_k_level_schedule_p1[episode_num]
-            new_epsilon_lower_k_p2 = epsilon_lower_k_level_schedule_p2[episode_num]
-            
-            # Update epsilon for learning agents.
+            # Player 1
             if isinstance(p1, agents.LearningAgent):
+                new_epsilon_agent_p1 = agent_configs['player_1']['params']['epsilon']  # Default to initial
+                new_epsilon_lower_k_p1 = None      # Default to None
+                
+                if epsilon_agent_schedule_p1 is not None:
+                    new_epsilon_agent_p1 = epsilon_agent_schedule_p1[episode_num]
+                if epsilon_lower_k_level_schedule_p1 is not None:
+                    new_epsilon_lower_k_p1 = epsilon_lower_k_level_schedule_p1[episode_num]
+                    
                 p1.update_epsilon(new_epsilon_agent_p1, new_epsilon_lower_k_p1)
+
+            # Player 2
             if isinstance(p2, agents.LearningAgent):
+                new_epsilon_agent_p2 = agent_configs['player_2']['params']['epsilon'] # Default to initial
+                new_epsilon_lower_k_p2 = None
+
+                if epsilon_agent_schedule_p2 is not None:
+                    new_epsilon_agent_p2 = epsilon_agent_schedule_p2[episode_num]
+                if epsilon_lower_k_level_schedule_p2 is not None:
+                    new_epsilon_lower_k_p2 = epsilon_lower_k_level_schedule_p2[episode_num]
+
+                p2.update_epsilon(new_epsilon_agent_p2, new_epsilon_lower_k_p2)
                 p2.update_epsilon(new_epsilon_agent_p2, new_epsilon_lower_k_p2)
             
         if log_trajectory:

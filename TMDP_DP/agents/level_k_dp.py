@@ -258,6 +258,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         
         self.epsilon = new_epsilon_agent
         if self.k > 1 and self.opponent:
+            new_epsilon_lower_k_level = cast(float,new_epsilon_lower_k_level)
             self.opponent.update_epsilon(new_epsilon_lower_k_level, new_epsilon_lower_k_level)
     
 class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):

@@ -2,7 +2,7 @@ import numpy as np
 from numpy.random import choice
 from tqdm.notebook import tqdm
 
-from typing import Optional
+from typing import cast, Optional
 
 from .utils import softmax
 from .base import LearningAgent
@@ -296,6 +296,7 @@ class LevelKQAgent(LearningAgent):
         
         self.epsilon = new_epsilon_agent
         if self.k > 1 and self.opponent:
+            new_epsilon_lower_k_level = cast(float,new_epsilon_lower_k_level)
             self.opponent.update_epsilon(new_epsilon_lower_k_level, new_epsilon_lower_k_level)
 
 
