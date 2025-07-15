@@ -245,6 +245,6 @@ def run_experiment(config, log_trajectory=False):
     print(f"Configuration saved to {config_path}")
     
     
-    return trajectory_logs_all_experiments if log_trajectory else None
+    return results_path
     
     
