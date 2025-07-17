@@ -52,6 +52,8 @@ class _BaseLevelKDPAgent(LearningAgent):
                            defined and initialized in subclasses.
         dirichlet_counts (np.ndarray): Dirichlet counts for modeling a Level-0
                                        opponent's policy. Initialized in subclasses that require it (k=1).
+        _opponent_policy_cache (dict): opponent policy chache to prevent recalculation of
+                                       E_{p(b'|s')}[V(s',b')] in lower levels of k-level hierarchy.
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon:float,
                  n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
@@ -98,6 +100,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         # --- Opponent Model Initialization (handled by subclasses) ---
         self.opponent = None
         self.dirichlet_counts = None
+        self._opponent_policy_cache = {}
         
         # --- Probability of action execution tensor (handled by subclasses) ---
         self.prob_exec_tensor = None
@@ -312,6 +315,16 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
                 env=env
             )
             
+    def _clear_policy_cache_recursive(self):
+        """
+        Clears the policy cache for this agent and all agents
+        down its cognitive hierarchy.
+        """
+        self._opponent_policy_cache.clear()
+        if self.k > 1 and self.opponent:
+            # Recursively call the clear method on the opponent model
+            self.opponent._clear_policy_cache_recursive()
+            
     def get_opponent_policy(self, obs: State) -> Policy:
         """
         Estimates the opponent's policy (action probabilities) for a given state.
@@ -328,6 +341,13 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
             np.ndarray: A probability distribution over the opponent's actions.
         """
         
+        # If the opponents policy was already calculated for the current observation, return it.
+        if obs in self._opponent_policy_cache:
+            return self._opponent_policy_cache[obs]
+        
+        # Initialize policy variable
+        policy = None
+        
         # --- Level-1 Agent: Opponent is Level-0 (Learned Random Policy) ---
         if self.k == 1:
             # Check if atributes is still initalized to None
@@ -335,16 +355,21 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
             
             # Normalize the counts for the given state to get a probability distribution.
             dir_sum = np.sum(self.dirichlet_counts[obs])
-            if dir_sum == 0:
+            if dir_sum != 0:
+                policy = self.dirichlet_counts[obs] / dir_sum
+            else: 
                 # Handle intialization of dirichlet_counts to 0
-                return np.ones(self.num_opponent_actions) / self.num_opponent_actions
-            return self.dirichlet_counts[obs] / dir_sum
+                policy = np.ones(self.num_opponent_actions) / self.num_opponent_actions
         
         # --- Level-k > 1 Agent: Opponent is Level-(k-1) ---
         else:
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
-             
-            return self.opponent.get_policy(obs)
+            
+            policy = self.opponent.get_policy(obs)
+            
+        self._opponent_policy_cache[obs] = policy
+            
+        return policy
             
     def _calculate_expected_future_values(self, s_prime_array: np.ndarray) -> np.ndarray:
         """
@@ -381,6 +406,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         agent's actions and choosing the best one. This is done using efficient
         vectorized operations.
         """
+        
         # Get pre-computed outcomes (next states and rewards) for all executed
         # action pairs from the current state 'obs'.
         rewards_executed = self.r_lookup[obs, :, :]
@@ -436,6 +462,9 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         """
         Selects an action based on the epsilon-greedy policy.
         """
+        # Clear the policy cache at the start of the decision-making process.
+        self._clear_policy_cache_recursive()
+        
         policy = self.get_policy(obs)
         return choice(self.action_space, p=policy)
 
@@ -450,6 +479,9 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
             new_obs: The next state after transition.
         """
         
+        # Clear the policy cache at the start of the update process.
+        self._clear_policy_cache_recursive()
+
         # Determine which action the opponent took from the action pair.
         opponent_action_taken = actions[1] if self.player_id == 0 else actions[0]
         
