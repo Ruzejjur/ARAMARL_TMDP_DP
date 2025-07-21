@@ -72,7 +72,7 @@ class CoinGame():
     _TIMEOUT_LEAD_LOSS_DELTA = -1
     
 
-    def __init__(self, max_steps: int = 50, grid_size: int = 5, push_distance: int = 1):
+    def __init__(self, max_steps: int, grid_size: int, push_distance: int):
         """
         Initializes the CoinGame environment.
 

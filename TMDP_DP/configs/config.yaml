@@ -16,18 +16,19 @@ agent_settings:
   player_1:
     class: "LevelKQAgent" # The class name of the agent from your `agents` module
     params:
-      k: 2
+      k: 3
       gamma: 0.95
       learning_rate: 0.5
-      epsilon: 1.0
-      initial_Q_value: 0.0
-      lower_level_k_epsilon: 0.1
+      epsilon: 1
+      initial_Q_value: 0
+      lower_level_k_epsilon: 1
 
     epsilon_decay_agent:
       type: "linear"
       end: 0.1
     epsilon_decay_inernal_opponent_model:
-      type: "no_decay"
+      type: "linear"
+      end: 0.1
 
   player_2:
     class: "LevelKQAgent" # The class name of the agent from your `agents` module
@@ -35,11 +36,14 @@ agent_settings:
       k: 1
       gamma: 0.95
       learning_rate: 0.5
-      epsilon: 1.0
-      initial_Q_value: 0.0
-      lower_level_k_epsilon: 0.1
+      epsilon: 1
+      initial_Q_value: 0
+      lower_level_k_epsilon: 1
 
     epsilon_decay_agent:
+      type: "linear"
+      end: 0.1
+    epsilon_decay_inernal_opponent_model:
       type: "linear"
       end: 0.1
 

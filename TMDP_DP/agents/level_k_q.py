@@ -116,7 +116,7 @@ class LevelKQAgent(LearningAgent):
         # tqdm shows progress bar.
         for s in tqdm(range(self.n_states), desc="Initializing value function."):
             if self._is_terminal_state(s):
-                Q[s,:,:] = 0
+                Q[s,:,:] = 0.0
                 
         return Q
 
