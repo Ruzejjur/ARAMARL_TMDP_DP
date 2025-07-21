@@ -244,6 +244,8 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
                 epsilon_agent_schedule_p1 = linear_epsilon_decay(
                     p1_params_config['epsilon'], p1_decay_config['end'], n_episodes
                 )
+            elif p1_decay_config.get('type') == 'no_decay':
+                epsilon_agent_schedule_p1 = np.arange(n_episodes)*p1_params_config['epsilon']
         except KeyError as e:
             raise KeyError(f"Missing key {e} in 'epsilon_decay_agent' or 'params' for player_1.")
 
@@ -255,6 +257,8 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
                 epsilon_lower_k_level_schedule_p1 = linear_epsilon_decay(
                     p1_params_config['lower_level_k_epsilon'], p1_internal_decay_config['end'], n_episodes
                 )
+            elif p1_internal_decay_config.get('type') == 'no_decay':
+                epsilon_lower_k_level_schedule_p1 = np.arange(n_episodes)*p1_params_config['lower_level_k_epsilon']
         except KeyError as e:
             raise KeyError(f"Missing key {e} in 'epsilon_decay_inernal_opponent_model' or 'params' for player_1.")
 
@@ -267,6 +271,8 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
                 epsilon_agent_schedule_p2 = linear_epsilon_decay(
                     p2_params_config['epsilon'], p2_decay_config['end'], n_episodes
                 )
+            elif p2_decay_config.get('type') == 'no_decay':
+                epsilon_agent_schedule_p2 = np.arange(n_episodes)*p2_params_config['epsilon']
         except KeyError as e:
             raise KeyError(f"Missing key {e} in 'epsilon_decay_agent' or 'params' for player_2.")
 
@@ -278,6 +284,8 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
                 epsilon_lower_k_level_schedule_p2 = linear_epsilon_decay(
                     p2_params_config['lower_level_k_epsilon'], p2_internal_decay_config['end'], n_episodes
                 )
+            elif p2_internal_decay_config.get('type') == 'no_decay':
+                epsilon_lower_k_level_schedule_p2 = np.arange(n_episodes)*p2_params_config['lower_level_k_epsilon']
         except KeyError as e:
             raise KeyError(f"Missing key {e} in 'epsilon_decay_inernal_opponent_model' or 'params' for player_2.")
             
