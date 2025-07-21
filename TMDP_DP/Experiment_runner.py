@@ -154,7 +154,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
         a2 = p2.act(obs=obs, env=env)
         
         # Store current locations for logging before the step.
-        p1_loc_old, p2_loc_old = env.player_0_pos.copy(), env.player_1_pos.copy()
+        p0_loc_old, p1_loc_old = env.player_0_pos.copy(), env.player_1_pos.copy()
 
         # Execute actions in the environment.
         s_new, rewards, done = env.step((a1, a2))
@@ -175,8 +175,8 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
         # Log step details if enabled.
         if log_trajectory:
             trajectory_log.append({
-                'p0_loc_old': p1_loc_old,
-                'p1_loc_old': p2_loc_old,
+                'p0_loc_old': p0_loc_old,
+                'p1_loc_old': p1_loc_old,
                 'p0_loc_new': env.player_0_pos.copy(),
                 'p1_loc_new': env.player_1_pos.copy(),
                 'coin1': env.coin_0_pos.copy() if env.coin0_available else None,
@@ -288,7 +288,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
                 epsilon_lower_k_level_schedule_p2 = np.arange(n_episodes)*p2_params_config['lower_level_k_epsilon']
         except KeyError as e:
             raise KeyError(f"Missing key {e} in 'epsilon_decay_inernal_opponent_model' or 'params' for player_2.")
-            
+    
     # --- Data Logging Initialisation ---
     all_rewards_p1 = []
     all_rewards_p2 = []
@@ -392,7 +392,6 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
                 if epsilon_lower_k_level_schedule_p2 is not None:
                     new_epsilon_lower_k_p2 = epsilon_lower_k_level_schedule_p2[episode_num]
 
-                p2.update_epsilon(new_epsilon_agent_p2, new_epsilon_lower_k_p2)
                 p2.update_epsilon(new_epsilon_agent_p2, new_epsilon_lower_k_p2)
             
         if log_trajectory:
