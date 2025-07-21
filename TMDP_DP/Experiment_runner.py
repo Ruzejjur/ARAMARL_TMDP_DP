@@ -303,16 +303,43 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
         }
         
         p1_params = {'class': agent_configs['player_1']['class'],
-                    'params': {**agent_configs['player_1'].get('params', {})
-                    ,'player_id': 0}}
-        
-        p1 = create_agent(p1_params, common_agent_params)
+            'params': {**agent_configs['player_1'].get('params', {})
+            ,'player_id': 0}}
         
         p2_params = {'class': agent_configs['player_2']['class'],
-                     'params': {**agent_configs['player_2'].get('params', {}),
-                     'player_id': 1}}
+                    'params': {**agent_configs['player_2'].get('params', {}),
+                    'player_id': 1}}
         
-        p2 = create_agent(p2_params, common_agent_params)
+        # Add coin location if agents is of type ManhattanAgent
+        if "ManhattanAgent" in p1_params['class']:
+            p1_params['params'].update({'coin_location': np.array([env.coin_0_pos,env.coin_1_pos])})
+        if "ManhattanAgent" in p2_params['class']:
+            p2_params['params'].update({'coin_location': np.array([env.coin_0_pos,env.coin_1_pos])})
+        
+        if agent_configs['player_1']['class'] != 'DPAgent_PerfectModel' and agent_configs['player_2']['class'] != 'DPAgent_PerfectModel':
+            
+            p1 = create_agent(p1_params, common_agent_params)
+            
+            p2 = create_agent(p2_params, common_agent_params)
+        
+        # If one of the agents is of class DPAgent_PerfectModel
+        else:
+            if agent_configs['player_1']['class'] == 'DPAgent_PerfectModel': 
+                
+                p2 = create_agent(p2_params, common_agent_params)
+            
+                p1_params['params'].update({'opponent': p2})
+                
+                p1 = create_agent(p1_params, common_agent_params)
+                
+            elif agent_configs['player_2']['class'] == 'DPAgent_PerfectModel': 
+                
+                p1 = create_agent(p1_params, common_agent_params)
+                
+                p2_params['params'].update({'opponent': p1})
+                
+                p2 = create_agent(p2_params, common_agent_params)
+                
         
         # Single experiment rewards initalisation
         run_rewards_p1 = []
@@ -333,7 +360,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
             
             # Player 1
             if isinstance(p1, agents.LearningAgent):
-                new_epsilon_agent_p1 = agent_configs['player_1']['params']['epsilon']  # Default to initial
+                new_epsilon_agent_p1 = agent_configs['player_1']['params']['epsilon'] if agent_configs['player_1']['class'] != 'DPAgent_PerfectModel' else 1 # Default to initial if appropriate 
                 new_epsilon_lower_k_p1 = None      # Default to None
                 
                 if epsilon_agent_schedule_p1 is not None:
@@ -345,7 +372,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
 
             # Player 2
             if isinstance(p2, agents.LearningAgent):
-                new_epsilon_agent_p2 = agent_configs['player_2']['params']['epsilon'] # Default to initial
+                new_epsilon_agent_p2 = agent_configs['player_2']['params']['epsilon'] if agent_configs['player_2']['class'] != 'DPAgent_PerfectModel' else 1 # Default to initial if appropriate 
                 new_epsilon_lower_k_p2 = None
 
                 if epsilon_agent_schedule_p2 is not None:

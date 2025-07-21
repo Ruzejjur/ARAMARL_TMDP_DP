@@ -164,6 +164,41 @@ class _BaseLevelKDPAgent(LearningAgent):
         # NOTE: The DP agent cannot account for the episode ending due to max_steps,
         # as this is not encoded in the state itself. This is a known limitation.
         return p0_wins or p1_wins or is_draw
+    
+    def _simulate_state_outcomes(self, s: State, env): 
+
+            env_copy = copy.deepcopy(env)
+            
+            try:
+                # Set the deterministic simulation environment to state 's'
+                self._reset_sim_env_to_state(s)
+            except (IndexError, ValueError):
+                raise ValueError(f'State with ID:{s} is invalid.')
+            
+            s_prime_lookup = np.zeros((self.n_states, self.num_self_actions, self.num_opponent_actions), dtype=int)
+            r_lookup = np.zeros((self.n_states, self.num_self_actions, self.num_opponent_actions), dtype=float)
+            
+            for a_self_exec in range(self.num_self_actions):
+                for a_opp_exec in range(self.num_opponent_actions):
+                    # Save the environment's state to restore it after the step
+                    current_env_state = self.env_snapshot.get_state()
+                    
+                    # The environment engine expects actions in [0, 1] order.
+                    if self.player_id == 0:
+                        action_pair = (a_self_exec, a_opp_exec)
+                    else:
+                        action_pair = (a_opp_exec, a_self_exec)
+
+                    # Simulate one step with the specified executed action pair
+                    s_prime, rewards_vec, _ = self.env_snapshot.step(action_pair)
+                    
+                    # Store the resulting next state and the reward for this agent
+                    s_prime_lookup[s, a_self_exec, a_opp_exec] = s_prime
+                    r_lookup[s, a_self_exec, a_opp_exec] = rewards_vec[self.player_id]
+                    
+                    # Restore environment to its original state for the next action pair
+                    self._reset_sim_env_to_state(current_env_state)
+        
 
     def _precompute_lookups(self) -> tuple:
         """
@@ -588,28 +623,6 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
         # Call the parent class constructor to handle all common setup.
         super().__init__(k, action_space, opponent_action_space, lower_level_k_epsilon, n_states, epsilon, gamma, initial_V_value, player_id, env)
 
-        # Initialize the k-level cognitive hierarchy with NonStationary agents.
-        if self.k == 1:
-            # Base Case (k=1): Model opponent as Level-0 (random policy).
-            # We use Dirichlet counts to learn this policy from observations.
-            # Initially, we assume a uniform prior.
-            self.dirichlet_counts = np.ones((self.n_states, len(self.opponent_action_space)))
-        elif self.k > 1:
-            # Recursive Step (k>1): The opponent is a Level-(k-1) version of this
-            # same class, with the player roles reversed.
-            self.opponent = LevelKDPAgent_NonStationary(
-                k=self.k - 1,
-                action_space=self.opponent_action_space,
-                opponent_action_space=self.action_space,
-                lower_level_k_epsilon=self.lower_level_k_epsilon,
-                n_states=self.n_states,
-                epsilon=self.lower_level_k_epsilon,
-                gamma=self.gamma,
-                initial_V_value=self.initial_V_value,
-                player_id=1 - self.player_id,
-                env=env
-            )
-
     def recalculate_transition_model(self, env):
         """
         Recursively recalculates the transition probability tensor for this agent
@@ -668,28 +681,6 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
         self.transition_model_weights = np.ones(
             (self.n_states, self.num_self_actions, self.num_opponent_actions, self.num_self_actions, self.num_opponent_actions)
         )
-
-        # Initialize k-level hierarchy
-        if self.k == 1:
-            # Base Case (k=1): Model opponent as Level-0 (random policy).
-            # We use Dirichlet counts to learn this policy from observations.
-            # Initially, we assume a uniform prior.
-            self.dirichlet_counts = np.ones((self.n_states, len(self.opponent_action_space)))
-        elif self.k > 1:
-            # Recursive Step (k>1): The opponent is a Level-(k-1) version of this
-            # same class, with the player roles reversed.
-            self.opponent = LevelKDPAgent_Dynamic(
-                k=self.k - 1,
-                action_space=self.opponent_action_space,
-                opponent_action_space=self.action_space, 
-                lower_level_k_epsilon=self.lower_level_k_epsilon,
-                n_states=self.n_states,
-                epsilon=self.lower_level_k_epsilon,
-                gamma=self.gamma,
-                initial_V_value=self.initial_V_value,
-                player_id=1 - self.player_id,
-                env=env
-            )
 
     def _get_probabilities_for_state(self, obs: State) -> np.ndarray:
         """

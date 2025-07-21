@@ -48,6 +48,10 @@ class DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         # k=1 is sufficient as we are pre-solving the optimal policy.
         # epsilon=0 is used because the final policy will be purely deterministic
         # and there is no exploration during online interaction.
+        
+        if not isinstance(opponent, ManhattanAgent):
+            raise TypeError(f"The provided opponent must be a ManhattanAgent class instance, but got {type(opponent).__name__} instead.")
+        
         super().__init__(k=1, action_space=action_space, opponent_action_space=opponent_action_space, lower_level_k_epsilon=0,
                          n_states=n_states, epsilon=0, gamma=gamma, initial_V_value=initial_V_value,
                          player_id=player_id, env=env)

@@ -1,47 +1,28 @@
 
 experiment_settings:
-  name: "Level1QAgent_vs_IQL_Softmax"
-  num_runs: 3       # How many times to repeat the experiment with different seeds
-  num_episodes: 1000 # Number of episodes per run
+  name: "Test"
+  num_runs: 1      # How many times to repeat the experiment with different seeds
+  num_episodes: 100 # Number of episodes per run
   results_dir: "results/" # Directory to save plots and data
 
 environment_settings:
   class: "CoinGame"
   params:
-    grid_size: 5
+    grid_size: 7
     max_steps: 20000
     push_distance: 2
 
 agent_settings:
   player_1:
-    class: "LevelKQAgent" # The class name of the agent from your `agents` module
+    class: "DPAgent_PerfectModel" # The class name of the agent from your `agents` module
     params:
-      k: 1
       gamma: 0.95
-      learning_rate: 0.5
-      epsilon: 1.0
-      lower_level_k_epsilon: 1.0
-      initial_Q_value: 0.0
-    epsilon_decay_agent:
-      type: "linear"
-      end: 0.1
-    epsilon_decay_inernal_opponent_model:
-      type: "linear"
-      end: 0.1
-
+      initial_V_value: 0.0
+      termination_criterion: 0.1
+      value_iteration_max_num_of_iter: 1000
 
   player_2:
-    class: "IndQLearningAgentSoftmax"
-    params:
-      beta: 1.0
-      gamma: 0.95
-      learning_rate: 0.5
-      epsilon: 1.0
-      lower_level_k_epsilon: 1.0
-      initial_Q_value: 0.0
-    epsilon_decay_agent:
-      type: "linear"
-      end: 0.1
+    class: "ManhattanAgent_Ultra_Aggressive" # The class name of the agent from your `agents` module
 
 plotting_settings:
-  moving_average_window: 100
+  moving_average_window: 10
