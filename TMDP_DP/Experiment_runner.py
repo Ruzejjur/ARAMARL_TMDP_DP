@@ -316,6 +316,9 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
         if "ManhattanAgent" in p2_params['class']:
             p2_params['params'].update({'coin_location': np.array([env.coin_0_pos,env.coin_1_pos])})
         
+        p1 = None
+        p2 = None
+        
         if agent_configs['player_1']['class'] != 'DPAgent_PerfectModel' and agent_configs['player_2']['class'] != 'DPAgent_PerfectModel':
             
             p1 = create_agent(p1_params, common_agent_params)
@@ -339,12 +342,13 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
                 p2_params['params'].update({'opponent': p1})
                 
                 p2 = create_agent(p2_params, common_agent_params)
-                
+        
+        assert isinstance(p1, agents.BaseAgent) and isinstance(p2, agents.BaseAgent), "Agents must always be of type BaseAgent."
         
         # Single experiment rewards initalisation
         run_rewards_p1 = []
         run_rewards_p2 = []
-            
+        
         # --- Episode Loop ---
         for episode_num in tqdm(range(n_episodes), desc=f"Epoch for experiment {experiment_num+1}", leave=False):
             
