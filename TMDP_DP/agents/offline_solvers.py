@@ -17,21 +17,18 @@ ValueFunction = np.ndarray
 ActionDetails = np.ndarray
 
 
-
 class DPAgent_PerfectModel(LearningAgent):
     """
-    Computes the optimal policy (a best response) policy using offline value iteration without taking into account opponents policy.
+    Computes the optimal policy (a best response) against a known, fixed opponent
+    policy using offline batch value iteration.
 
-    It inherits from `LevelKDPAgent_Stationary` to reuse the efficient,
-    vectorized model-handling and Bellman update logic.
-
-    Attributes:
-        optim_policy_table (np.ndarray): A table of shape (n_states,) storing the
-                                         final, optimal action for each state.
-                                         
-        For other atribute description check parent.
+    This agent acts as an offline solver. It first computes the opponent's
+    policy for every state. It then combines this policy with the environment's
+    base transition dynamics to create a state-dependent transition model.
+    Finally, it runs value iteration on V(s) to find the optimal value function
+    and extracts the corresponding deterministic policy.
     """
-    def __init__(self, action_space: np.ndarray, opponent_action_space: np.ndarray, n_states: int, gamma: float, initial_V_value: float, player_id: int,
+    def __init__(self, action_space: np.ndarray, n_states: int, gamma: float, initial_V_value: float, player_id: int,
                  termination_criterion: float, value_iteration_max_num_of_iter: int, env, opponent: ManhattanAgent):
 
         # --- Core Agent Parameters ---
@@ -76,7 +73,7 @@ class DPAgent_PerfectModel(LearningAgent):
         
         # Pre-calculate the state-independent execution probability tensor:
         # P(a_self_exec, a_opp_exec | a_self_intend)
-        self.prob_exec_tensor = self._calculate_execution_probabilities(env)
+        self.probab_exec_tensor_opponent_action_independent = self._calculate_execution_probabilities(env)
         
         # Value iteration termination critaria
         self.termination_criterion = termination_criterion
@@ -225,7 +222,6 @@ class DPAgent_PerfectModel(LearningAgent):
             np.ndarray: The initialized value function table of shape
                         (n_states, num_opponent_actions).
         """
-        #*NOTE: Overloaded with respect to LevelKDPAgent_Stationary
         
         V = np.ones([self.n_states])*initial_V_value
         
@@ -270,17 +266,18 @@ class DPAgent_PerfectModel(LearningAgent):
     
     def _calculate_execution_probabilities(self, env) -> np.ndarray:
         """
-        Calculates the state-independent transition tensor P(executed | intended).
+        Calculates the state-dependent transition tensor P(executed | intended, state).
 
-        This 4D tensor gives the probability of a specific pair of *executed*
-        actions (a_self_exec, a_opp_exec) occurring, given a pair of *intended*
-        actions (a_self_intend, a_opp_intend).
+        This is a two-step process:
+        1. Calculate the state-independent P(executed | intended) tensor based on
+           the environment's raw action success probabilities.
+        2. Marginalize out the opponent's intended action by multiplying with their
+           pre-computed, state-dependent policy P(opp_intended | state).
 
         Returns:
             A 4D np.ndarray with dimensions corresponding to:
-            (intended_self, intended_opp, executed_self, executed_opp)
+            (state, intended_self, executed_self, executed_opp)
         """
-        #*NOTE: Overloaded with respect to LevelKDPAgent_Stationary
         
         if self.player_id == 0: 
             self_exec_prob, opp_exec_prob = env.player_0_execution_prob, env.player_1_execution_prob
@@ -318,19 +315,21 @@ class DPAgent_PerfectModel(LearningAgent):
         
         probab_exec_tensor = prob_self[:, np.newaxis, :, np.newaxis] * prob_opp[np.newaxis, :, np.newaxis, :]
         
-        probab_exec_tensor_state_dependent = np.einsum(
+        # --- Calculate opponent action independent and state dependent probability execution tensor
+        # \sum_{a_o_int}P(a_s_exec, a_o_exec | a_s_int, a_o_int)p(a_o_int| s)
+        probab_exec_tensor_opponent_action_independent = np.einsum(
             'ijlk, sj -> silk', 
             probab_exec_tensor, 
             self.opponent_policy_table, 
             optimize=True
         )
         
-        return probab_exec_tensor_state_dependent
+        return probab_exec_tensor_opponent_action_independent
     
     def _extract_optimal_policy(self):
         """
         Extracts the optimal deterministic policy π*(s) after value iteration by performing one extra value iteration sweep
-        and extracting the agents action which maximises the value in each state.
+        extracting the agents action which maximises the value in each state.
         """
         
         print("Extracting optimal policy...")
@@ -339,7 +338,7 @@ class DPAgent_PerfectModel(LearningAgent):
                 rewards_executed = self.r_lookup[s, :, :]
                 s_primes_executed = self.s_prime_lookup[s, :, :]
                 
-                prob_tensor_for_state_s = self.prob_exec_tensor[s, :, :, :]
+                prob_tensor_for_state_s = self.probab_exec_tensor_opponent_action_independent[s, :, :, :]
                 
                 q_values_for_actions = np.einsum(
                     'ilk,lk->i', prob_tensor_for_state_s,
@@ -375,7 +374,7 @@ class DPAgent_PerfectModel(LearningAgent):
                 if self._is_terminal_state(s):
                     continue  # The value of terminal states is always 0.
                 
-                # Store the value of VQ(s, opponent_action) before the update
+                # Store the value of V(s) before the update
                 v_s_old = self.V[s]
                 
                 # Get pre-computed outcomes from the lookup tables for state 's'.
@@ -383,7 +382,7 @@ class DPAgent_PerfectModel(LearningAgent):
                 s_primes_executed = self.s_prime_lookup[s, :, :]
                 
                 # Extract probability of transition for the current state s
-                prob_tensor_for_state_s = self.prob_exec_tensor[s, :, :, :]
+                prob_tensor_for_state_s = self.probab_exec_tensor_opponent_action_independent[s, :, :, :]
                 
                 q_values_for_actions = np.einsum('ikl,lk->i', prob_tensor_for_state_s ,rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True)
                 
@@ -403,7 +402,7 @@ class DPAgent_PerfectModel(LearningAgent):
                 # Final policy extraction pass
                 return
             
-            print(f"Value iteration did not converge after {value_iteration_max_num_of_iter} iterations.")
+        print(f"Value iteration did not converge after {value_iteration_max_num_of_iter} iterations.")
 
     def act(self, obs: State, env=None) -> Action:
         """
