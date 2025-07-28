@@ -326,24 +326,28 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
         
         p1 = None
         p2 = None
+
+        # Check if either agent is an offline solver
+        offline_solver_classes = ['DPAgent_PerfectModel', 'TMDP_DPAgent_PerfectModel']
+        p1_is_offline_solver = agent_configs['player_1']['class'] in offline_solver_classes
+        p2_is_offline_solver = agent_configs['player_2']['class'] in offline_solver_classes
         
-        if agent_configs['player_1']['class'] != 'DPAgent_PerfectModel' and agent_configs['player_2']['class'] != 'DPAgent_PerfectModel':
-            
+        if not p1_is_offline_solver and not p2_is_offline_solver:
             p1 = create_agent(p1_params, common_agent_params)
             
             p2 = create_agent(p2_params, common_agent_params)
         
         # If one of the agents is of class DPAgent_PerfectModel
         else:
-            if agent_configs['player_1']['class'] == 'DPAgent_PerfectModel': 
-                
+            if p1_is_offline_solver:
+
                 p2 = create_agent(p2_params, common_agent_params)
             
                 p1_params['params'].update({'opponent': p2})
                 
                 p1 = create_agent(p1_params, common_agent_params)
                 
-            elif agent_configs['player_2']['class'] == 'DPAgent_PerfectModel': 
+            elif p2_is_offline_solver:
                 
                 p1 = create_agent(p1_params, common_agent_params)
                 
@@ -372,7 +376,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
             
             # Player 1
             if isinstance(p1, agents.LearningAgent):
-                #new_epsilon_agent_p1 = agent_configs['player_1']['params']['epsilon'] if agent_configs['player_1']['class'] != 'DPAgent_PerfectModel' else 1 # Default to initial if appropriate 
+                new_epsilon_agent_p1 = agent_configs['player_1']['params']['epsilon'] if not p1_is_offline_solver else 1 # Default to initial if appropriate 
                 new_epsilon_lower_k_p1 = None      # Default to None
                 
                 if epsilon_agent_schedule_p1 is not None:
@@ -384,7 +388,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
 
             # Player 2
             if isinstance(p2, agents.LearningAgent):
-                #new_epsilon_agent_p2 = agent_configs['player_2']['params']['epsilon'] if agent_configs['player_2']['class'] != 'DPAgent_PerfectModel' else 1 # Default to initial if appropriate 
+                new_epsilon_agent_p2 = agent_configs['player_2']['params']['epsilon'] if not p2_is_offline_solver else 1 # Default to initial if appropriate 
                 new_epsilon_lower_k_p2 = None
 
                 if epsilon_agent_schedule_p2 is not None:

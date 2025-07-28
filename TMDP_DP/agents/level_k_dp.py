@@ -539,7 +539,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
             self_exec_prob, opp_exec_prob = env.player_0_execution_prob, env.player_1_execution_prob
         else:
             self_exec_prob, opp_exec_prob = env.player_1_execution_prob, env.player_0_execution_prob
-        
+         
         # Extract move and push actions from the detailes
         self_moves, self_pushes = self.self_action_details[:, 0], self.self_action_details[:, 1]
         opp_moves, opp_pushes = self.opponent_action_details[:, 0], self.opponent_action_details[:, 1]
