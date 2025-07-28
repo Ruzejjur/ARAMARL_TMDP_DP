@@ -8,6 +8,8 @@ Optimization_plan.rtf
 *.yaml
 *.npy
 
+!config_template.yaml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

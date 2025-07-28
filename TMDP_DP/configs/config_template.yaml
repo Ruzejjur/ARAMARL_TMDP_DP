@@ -1,0 +1,133 @@
+# ---------------------------------------------------------------------------
+# EXPERIMENT SETTINGS
+# Defines the overall structure of the experimental run.
+# ---------------------------------------------------------------------------
+experiment_settings:
+  # A descriptive name for the experiment. This will be used in the output folder name.
+  name: "Experiment_Name_Here"
+
+  # The number of times to repeat the entire experiment with different random seeds.
+  # This is crucial for ensuring that results are statistically significant.
+  num_runs: 5
+
+  # The number of episodes (games) to run within each experimental run.
+  num_episodes: 10000
+
+  # The base directory where all results (plots, logs, config copies) will be saved.
+  # A timestamped sub-folder will be created inside this directory for each run.
+  results_dir: "results/"
+
+# ---------------------------------------------------------------------------
+# ENVIRONMENT SETTINGS
+# Configures the game world in which the agents will interact.
+# ---------------------------------------------------------------------------
+environment_settings:
+  # The class name of the environment to use, as defined in `engine_DP.py`.
+  class: "CoinGame"
+  params:
+    # The size of the square grid (N x N).
+    grid_size: 5
+
+    # The maximum number of steps allowed in a single episode before it times out.
+    max_steps: 20000
+
+    # The number of grid cells an opponent is moved when successfully pushed.
+    push_distance: 2
+
+# ---------------------------------------------------------------------------
+# AGENT SETTINGS
+# Defining the agents Player 1 and Player 2.
+# You can mix and match any agent types from `agents` module.
+# ---------------------------------------------------------------------------
+agent_settings:
+  player_1:
+    # The class name of the agent for Player 1 (must exist in the `agents` module).
+    # --- AVAILABLE AGENT CLASSES ---
+    # Heuristic Agents: ManhattanAgent, ManhattanAgent_Passive, ManhattanAgent_Aggressive, ManhattanAgent_Ultra_Aggressive
+    # Q-Learning Agents: IndQLearningAgent, IndQLearningAgentSoftmax, LevelKQAgent, LevelKQAgentSoftmax
+    # DP Agents: LevelKDPAgent_Stationary, LevelKDPAgent_NonStationary, LevelKDPAgent_Dynamic
+    # Offline Solvers: DPAgent_PerfectModel, TMDP_DPAgent_PerfectModel  # UPDATED: Added TMDP agent
+    class: "LevelKQAgent"
+
+    # Agent-specific parameters that are passed to its constructor.
+    # The `experiment_runner.py` will validate that all required parameters are provided.
+    params:
+      # --- Common Parameters (for most learning agents) ---
+      gamma: 0.95              # Discount factor for future rewards.
+      learning_rate: 0.5       # The learning rate (alpha).
+      epsilon: 1.0             # The initial exploration rate for epsilon-greedy policies.
+
+      # --- Parameters for Level-K Agents (LevelKQAgent, LevelKDPAgent_*) ---
+      k: 2                     # The cognitive level of the agent.
+      initial_Q_value: 0.0     # Initial value for Q-tables (for Level-K Q-agents).
+      initial_V_value: 0.0     # Initial value for V-tables (for Level-K DP agents).
+
+      # The initial exploration rate for the agent's *internal* models of the opponent (k-1 and lower).
+      lower_level_k_epsilon: 0.1
+
+      # --- Parameters for Softmax Agents (IndQLearningAgentSoftmax, LevelKQAgentSoftmax) ---
+      beta: 1.0                # The temperature parameter for the softmax policy. Higher values lead to more deterministic actions.
+
+      # --- Parameters for Heuristic Agents (ManhattanAgent_*) ---
+      # Note: Heuristic agents do not have `params` as their arguments are passed from common_params.
+      #       The `coin_location` parameter is handled by experiment_runner.py.
+
+      # --- Parameters for DPAgent_PerfectModel ---
+      # opponent: <ManhattanAgent> # This is configured as player_2 and handled by the runner.
+      # gamma: 0.95
+      # initial_V_value: 0.0
+      termination_criterion: 0.001
+      value_iteration_max_num_of_iter: 1000
+
+    # Defines the epsilon decay schedule for the main agent (Player 1).
+    epsilon_decay_agent:
+      type: "linear"           # Options: "linear", "no_decay"
+      end: 0.1                 # The final epsilon value.
+
+    # Defines the epsilon decay for the k-1 cognitive hierarchy.
+    # This is only used for k-level agents.
+    epsilon_decay_inernal_opponent_model:
+      type: "linear" # Options: "linear", "no_decay"
+      end: 0.1 # The final epsilon value.
+
+  player_2:
+    class: "IndQLearningAgentSoftmax"
+    params:
+      # Common params
+      gamma: 0.95
+      learning_rate: 0.5
+      epsilon: 1.0
+
+      # Softmax specific
+      beta: 1.0 # Note: Epsilon is not used for action selection by Softmax agents.
+
+      # Level-K specific (not used by IndQLearningAgentSoftmax, but shown for completeness)
+      k: 1
+      initial_Q_value: 0.0
+      lower_level_k_epsilon: 0.1
+
+
+    # Epsilon decay for the agent itself.
+    # Note: IndQLearningAgentSoftmax uses a softmax policy, so `epsilon` and its decay are only used
+    # if you were to modify its `act` method to be epsilon-greedy. For the current implementation,
+    # this section would be ignored for this specific agent. It is kept for consistency.
+
+    # Note: Softmax agents do not use an epsilon-greedy policy for action selection,
+    # so this section is ignored by IndQLearningAgentSoftmax
+    epsilon_decay_agent:
+      type: "linear"
+      end: 0.1
+
+    # Epsilon decay for the internal opponent model (not applicable to IQL agents).
+    epsilon_decay_inernal_opponent_model:
+      type: "linear"
+      end: 0.1
+
+# ---------------------------------------------------------------------------
+# PLOTTING SETTINGS
+# Configures the appearance of the final reward plot.
+# ---------------------------------------------------------------------------
+plotting_settings:
+  # The size of the window for the moving average applied to the reward curves.
+  # This helps to smooth out the noise and see the underlying learning trend.
+  moving_average_window: 100
