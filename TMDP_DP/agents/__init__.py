@@ -43,6 +43,6 @@ from .level_k_dp import (
 
 # --- Offline Solver Agents ---
 # Import the perfect model solver
-from .offline_solvers import DPAgent_PerfectModel
+from .offline_solvers import TMDDPAgent_PerfectModel
 
 print("Agents package successfully initialized.")
