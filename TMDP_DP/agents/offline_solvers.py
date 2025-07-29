@@ -18,7 +18,7 @@ ValueFunction = np.ndarray
 ActionDetails = np.ndarray
 
 
-class DPAgent_PerfectModel(LearningAgent):
+class MDP_DP_Agent_PerfectModel(LearningAgent):
     """
     Computes the optimal policy (a best response) against a known, fixed opponent
     policy using offline batch value iteration.
@@ -434,7 +434,7 @@ class DPAgent_PerfectModel(LearningAgent):
         
 
 
-class TMDP_DPAgent_PerfectModel(LevelK_TMDP_DP_Agent_Stationary):
+class TMDP_DP_Agent_PerfectModel(LevelK_TMDP_DP_Agent_Stationary):
     """
     Computes the optimal policy (a best response) against a known, fixed opponent
     policy using offline value iteration.

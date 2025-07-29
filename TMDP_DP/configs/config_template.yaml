@@ -2,6 +2,8 @@
 # EXPERIMENT SETTINGS
 # Defines the overall structure of the experimental run.
 # ---------------------------------------------------------------------------
+comment: User defined comment sepecifing details of the run. This yaml entry is not used in the code.
+
 experiment_settings:
   # A descriptive name for the experiment. This will be used in the output folder name.
   name: "Experiment_Name_Here"

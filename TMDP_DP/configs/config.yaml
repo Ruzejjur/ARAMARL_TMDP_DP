@@ -1,52 +1,60 @@
+comment: Testing LevelK_MDP_DP_Agent_Stationary vs. LevelK_TMDP_DP_Agent_Stationary to see which implementation performs better. 
+         Both are set to the same parameters and level 1. With bigger grid.
+
 
 experiment_settings:
-  name: "Test"
-  num_runs: 5     # How many times to repeat the experiment with different seeds
-  num_episodes: 100 # Number of episodes per run
+  name: "LevelK_MDP_DP_Agent_Stationary_vs_LevelK_TMDP_DP_Agent_Stationary"
+  num_runs: 1     # How many times to repeat the experiment with different seeds
+  num_episodes: 10000 # Number of episodes per run
   run_seed: 42 # Intial seed for runs
   results_dir: "results/" # Directory to save plots and data
 
 environment_settings:
   class: "CoinGame"
   params:
-    grid_size: 7
+    grid_size: 15
     max_steps: 20000
     push_distance: 2
 
 agent_settings:
   player_1:
-    class: "LevelKQAgent" # The class name of the agent from your `agents` module
+    class: LevelK_TMDP_DP_Agent_Stationary
     params:
-      k: 3
       gamma: 0.95
-      learning_rate: 0.5
-      epsilon: 1
-      initial_Q_value: 0
-      lower_level_k_epsilon: 1
+      epsilon: 1.0
+      initial_V_value: 0
+      k: 1
+      lower_level_k_epsilon: 0.1
 
     epsilon_decay_agent:
-      type: "linear"
-      end: 0.1
+      type: "linear"           # Options: "linear", "no_decay"
+      end: 0.1                 # The final epsilon value.
+
+    # Defines the epsilon decay for the k-1 cognitive hierarchy.
+    # This is only used for k-level agents.
     epsilon_decay_inernal_opponent_model:
-      type: "linear"
-      end: 0.1
+      type: "linear"           # Options: "linear", "no_decay"
+      end: 0.1                 # The final epsilon value.
+
 
   player_2:
-    class: "LevelKQAgent" # The class name of the agent from your `agents` module
+    class: LevelK_MDP_DP_Agent_Stationary
     params:
-      k: 1
       gamma: 0.95
-      learning_rate: 0.5
-      epsilon: 1
-      initial_Q_value: 0
-      lower_level_k_epsilon: 1
+      epsilon: 1.0
+      initial_V_value: 0
+      k: 1
+      lower_level_k_epsilon: 0.1
 
     epsilon_decay_agent:
-      type: "linear"
-      end: 0.1
+      type: "linear"           # Options: "linear", "no_decay"
+      end: 0.1                 # The final epsilon value.
+
+    # Defines the epsilon decay for the k-1 cognitive hierarchy.
+    # This is only used for k-level agents.
     epsilon_decay_inernal_opponent_model:
-      type: "linear"
-      end: 0.1
+      type: "linear"           # Options: "linear", "no_decay"
+      end: 0.1                 # The final epsilon value.
 
 plotting_settings:
   moving_average_window: 1000

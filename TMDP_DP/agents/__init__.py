@@ -54,8 +54,8 @@ from .tmdp_dp import (
 # --- Offline Solver Agents ---
 # Import the perfect model solver
 from .offline_solvers import (
-    TMDP_DPAgent_PerfectModel,
-    DPAgent_PerfectModel
+    TMDP_DP_Agent_PerfectModel,
+    MDP_DP_Agent_PerfectModel
 )
 
 logging.info("Agents package successfully initialized.")

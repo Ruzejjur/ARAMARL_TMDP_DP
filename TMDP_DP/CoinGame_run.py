@@ -1,6 +1,5 @@
 import logging
 import sys
-from experiment_runner import load_config, run_experiment
 
 # Directing log messages of level INFO and higher to the console.
 logging.basicConfig(
@@ -9,6 +8,9 @@ logging.basicConfig(
     stream=sys.stdout,  # Explicitly direct logs to standard output
     force=True
 )
+
+from experiment_runner import load_config, run_experiment
+
 
 if __name__ == "__main__":
     # Use the config file specified from the command line, 

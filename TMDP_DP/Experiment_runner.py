@@ -359,7 +359,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
         p2 = None
 
         # Check if either agent is an offline solver
-        offline_solver_classes = ['DPAgent_PerfectModel', 'TMDP_DPAgent_PerfectModel']
+        offline_solver_classes = ['MDP_DP_Agent_PerfectModel', 'TMDP_DP_Agent_PerfectModel']
         p1_is_offline_solver = agent_configs['player_1']['class'] in offline_solver_classes
         p2_is_offline_solver = agent_configs['player_2']['class'] in offline_solver_classes
         

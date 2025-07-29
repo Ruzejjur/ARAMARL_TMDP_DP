@@ -372,7 +372,7 @@ class LevelK_MDP_DP_Agent_Stationary(_BaseLevelK_MDP_DP_Agent):
         # Calculate Q(s, a) = Σ_{a_exec, b_exec} P(a_exec, b_exec | s, a) * [R(s,a,b) + γ * V(s')]
         # 'ikl,lk->i' sums over executed actions (k, l) for each intended action 'i'.
         q_values_for_actions = np.einsum(
-            'ikl,lk->i',
+            'ikl,kl->i',
             state_dependent_transition_tensor ,
             rewards_executed + self.gamma * self.V[s_primes_executed],
             optimize=True
@@ -452,7 +452,7 @@ class LevelK_MDP_DP_Agent_Stationary(_BaseLevelK_MDP_DP_Agent):
         state_dependent_transition_tensor = self._calculate_state_dependent_transition_tensor(obs)
         
         # Calculate the Q-value for each of the agent's possible actions 'a'.
-        q_values_for_actions = np.einsum('ikl,lk->i', state_dependent_transition_tensor ,rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True)
+        q_values_for_actions = np.einsum('ikl,kl->i', state_dependent_transition_tensor ,rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True)
         
         # Bellman update: The value of the state is the value of the best action from it.
         self.V[obs] = np.max(q_values_for_actions)
