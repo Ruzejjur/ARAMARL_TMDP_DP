@@ -13,6 +13,11 @@ experiment_settings:
   # The number of episodes (games) to run within each experimental run.
   num_episodes: 10000
 
+  # Starting seed of independent experiment runs
+  # NOTE: Each succesive run has seed run_seed + 1
+  # Leaving this value empty will run the experiments with random seed
+  run_seed: 42
+
   # The base directory where all results (plots, logs, config copies) will be saved.
   # A timestamped sub-folder will be created inside this directory for each run.
   results_dir: "results/"
@@ -43,10 +48,11 @@ agent_settings:
   player_1:
     # The class name of the agent for Player 1 (must exist in the `agents` module).
     # --- AVAILABLE AGENT CLASSES ---
-    # Heuristic Agents: ManhattanAgent, ManhattanAgent_Passive, ManhattanAgent_Aggressive, ManhattanAgent_Ultra_Aggressive
-    # Q-Learning Agents: IndQLearningAgent, IndQLearningAgentSoftmax, LevelKQAgent, LevelKQAgentSoftmax
-    # DP Agents: LevelKDPAgent_Stationary, LevelKDPAgent_NonStationary, LevelKDPAgent_Dynamic
-    # Offline Solvers: DPAgent_PerfectModel, TMDP_DPAgent_PerfectModel  # UPDATED: Added TMDP agent
+    # Heuristic Agents:       ManhattanAgent, ManhattanAgent_Passive, ManhattanAgent_Aggressive, ManhattanAgent_Ultra_Aggressive
+    # Q-Learning Agents:      IndQLearningAgent, IndQLearningAgentSoftmax, LevelKQAgent, LevelKQAgentSoftmax
+    # MDP DP Agents:          LevelK_MDP_DP_Agent_Stationary, LevelK_MDP_DP_Agent_NonStationary, LevelK_MDP_DP_Agent_Dynamic
+    # TMDP DP Agents:         LevelK_TMDP_DP_Agent_Stationary, LevelK_TMDP_DP_Agent_NonStationary, LevelK_TMDP_DP_Agent_Dynamic
+    # Offline Solvers:        DPAgent_PerfectModel, TMDP_DPAgent_PerfectModel
     class: "LevelKQAgent"
 
     # Agent-specific parameters that are passed to its constructor.
@@ -54,30 +60,26 @@ agent_settings:
     params:
       # --- Common Parameters (for most learning agents) ---
       gamma: 0.95              # Discount factor for future rewards.
-      learning_rate: 0.5       # The learning rate (alpha).
+      learning_rate: 0.5       # The learning rate (alpha) for Q-learning agents.
       epsilon: 1.0             # The initial exploration rate for epsilon-greedy policies.
 
-      # --- Parameters for Level-K Agents (LevelKQAgent, LevelKDPAgent_*) ---
+      # --- Parameters for Level-K Agents (LevelKQ, LevelK_MDP_DP, LevelK_TMDP_DP) ---
       k: 2                     # The cognitive level of the agent.
-      initial_Q_value: 0.0     # Initial value for Q-tables (for Level-K Q-agents).
-      initial_V_value: 0.0     # Initial value for V-tables (for Level-K DP agents).
-
-      # The initial exploration rate for the agent's *internal* models of the opponent (k-1 and lower).
-      lower_level_k_epsilon: 0.1
+      lower_level_k_epsilon: 0.1 # The epsilon for the agent's *internal* models of the opponent (k-1 and lower).
+      
+      # --- Parameters for Q-Learning Agents (LevelKQ, IndQLearning) ---
+      initial_Q_value: 0.0     # Initial value for Q-tables.
+      
+      # --- Parameters for DP Agents (LevelK_MDP_DP, LevelK_TMDP_DP, offline solvers) ---
+      initial_V_value: 0.0     # Initial value for V-tables.
 
       # --- Parameters for Softmax Agents (IndQLearningAgentSoftmax, LevelKQAgentSoftmax) ---
       beta: 1.0                # The temperature parameter for the softmax policy. Higher values lead to more deterministic actions.
 
-      # --- Parameters for Heuristic Agents (ManhattanAgent_*) ---
-      # Note: Heuristic agents do not have `params` as their arguments are passed from common_params.
-      #       The `coin_location` parameter is handled by experiment_runner.py.
-
-      # --- Parameters for DPAgent_PerfectModel ---
-      # opponent: <ManhattanAgent> # This is configured as player_2 and handled by the runner.
-      # gamma: 0.95
-      # initial_V_value: 0.0
-      termination_criterion: 0.001
-      value_iteration_max_num_of_iter: 1000
+      # --- Parameters for Offline Solvers (DPAgent_PerfectModel, TMDP_DPAgent_PerfectModel) ---
+      # NOTE: The 'opponent' param is configured as player_2 and handled automatically by the runner.
+      termination_criterion: 0.001        # Convergence threshold for value iteration.
+      value_iteration_max_num_of_iter: 1000 # Max iterations for value iteration.
 
     # Defines the epsilon decay schedule for the main agent (Player 1).
     epsilon_decay_agent:
@@ -87,8 +89,8 @@ agent_settings:
     # Defines the epsilon decay for the k-1 cognitive hierarchy.
     # This is only used for k-level agents.
     epsilon_decay_inernal_opponent_model:
-      type: "linear" # Options: "linear", "no_decay"
-      end: 0.1 # The final epsilon value.
+      type: "linear"           # Options: "linear", "no_decay"
+      end: 0.1                 # The final epsilon value.
 
   player_2:
     class: "IndQLearningAgentSoftmax"
@@ -99,7 +101,7 @@ agent_settings:
       epsilon: 1.0
 
       # Softmax specific
-      beta: 1.0 # Note: Epsilon is not used for action selection by Softmax agents.
+      beta: 1.0 # NOTE: Epsilon is not used for action selection by Softmax agents.
 
       # Level-K specific (not used by IndQLearningAgentSoftmax, but shown for completeness)
       k: 1
@@ -108,11 +110,11 @@ agent_settings:
 
 
     # Epsilon decay for the agent itself.
-    # Note: IndQLearningAgentSoftmax uses a softmax policy, so `epsilon` and its decay are only used
+    # NOTE: IndQLearningAgentSoftmax uses a softmax policy, so `epsilon` and its decay are only used
     # if you were to modify its `act` method to be epsilon-greedy. For the current implementation,
     # this section would be ignored for this specific agent. It is kept for consistency.
 
-    # Note: Softmax agents do not use an epsilon-greedy policy for action selection,
+    # NOTE: Softmax agents do not use an epsilon-greedy policy for action selection,
     # so this section is ignored by IndQLearningAgentSoftmax
     epsilon_decay_agent:
       type: "linear"

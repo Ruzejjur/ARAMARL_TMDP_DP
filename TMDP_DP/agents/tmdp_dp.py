@@ -15,14 +15,17 @@ Policy = np.ndarray
 ValueFunction = np.ndarray
 ActionDetails = np.ndarray
 
-class _BaseLevelKDPAgent(LearningAgent):
+class _BaseLevelK_TMDP_DP_Agent(LearningAgent):
     """
-    Base class for Level-K Dynamic Programming agents.
+    Base class for Level-K Threatened Markov Decision Process Dynamic Programming (TMDP_DP) agents.
 
-    This class handles the common, expensive setup procedures required by all
-    Level-K DP agents, such as pre-computing the environment's transition
-    and reward dynamics. Subclasses should implement the specific opponent
-    modeling logic.
+    This implementation differs from the standard DP agent by using a value function
+    V(s, b), which represents the value of being in state 's' *given* that the
+    opponent has committed to taking intended action 'b'. This allows for a more
+    explicit form of best-response reasoning.
+
+    It handles the common, expensive setup procedures like pre-computing the
+    environment's deterministic transition and reward dynamics.
 
     Attributes:
         k (int): The cognitive level of the agent. A Level-k agent models its
@@ -52,8 +55,8 @@ class _BaseLevelKDPAgent(LearningAgent):
                            defined and initialized in subclasses.
         dirichlet_counts (np.ndarray): Dirichlet counts for modeling a Level-0
                                        opponent's policy. Initialized in subclasses that require it (k=1).
-        _opponent_policy_cache (dict): opponent policy chache to prevent recalculation of
-                                       E_{p(b'|s')}[V(s',b')] in lower levels of k-level hierarchy.
+        _opponent_policy_cache (dict): A cache to store opponent policies for future states
+                                       to prevent redundant calculations within a single time step.
     """
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon:float,
                  n_states: int, epsilon: float, gamma: float, initial_V_value: float, player_id: int, env):
@@ -78,8 +81,6 @@ class _BaseLevelKDPAgent(LearningAgent):
         self.env_snapshot.player_1_execution_prob = 1.0
         
         # ---Action Setup ---
-        # Determine action spaces and details based on player_id
-
         self.self_action_details = self.env_snapshot.combined_actions
         self.opponent_action_details = self.env_snapshot.combined_actions
         self.num_self_actions = len(env.combined_actions)
@@ -138,6 +139,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         (a win) or if all four coins have been claimed by any combination of
         players (a draw or a win). This logic is coupled to the environment's
         specific state encoding scheme.
+        (Implementation is identical to the _BaseLevelK_MDP_DP_Agent).
         """
         
         # Grid size N, base for coin collection status
@@ -165,7 +167,6 @@ class _BaseLevelKDPAgent(LearningAgent):
         # as this is not encoded in the state itself. This is a known limitation.
         return p0_wins or p1_wins or is_draw
         
-
     def _precompute_lookups(self) -> tuple:
         """
         Builds lookup tables for next states (s') and rewards (r).
@@ -174,7 +175,8 @@ class _BaseLevelKDPAgent(LearningAgent):
         (state, executed_action_self, executed_action_opponent) tuple
         to its deterministic outcome. This avoids repeated simulation calls
         during the learning process, significantly speeding up calculations.
-
+        (Implementation is identical to the _BaseLevelK_MDP_DP_Agent).
+        
         Returns:
             A tuple containing:
             - s_prime_lookup (np.ndarray): Table of next states.
@@ -221,6 +223,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         Resets the internal simulation environment to a specific state index.
         This involves decoding the integer state into player positions and
         coin collection statuses.
+        (Implementation is identical to the _BaseLevelK_MDP_DP_Agent).
         """
         
         self.env_snapshot.reset()
@@ -254,6 +257,7 @@ class _BaseLevelKDPAgent(LearningAgent):
         Updates the exploration rate for this agent and its recursive opponent model.
         This ensures that if the exploration schedule changes, the change
         propagates down the entire cognitive hierarchy.
+        (Implementation is identical to the _BaseLevelK_MDP_DP_Agent).
         
         Args:
             new_epsilon_agent (float): The new exploration rate for agent.
@@ -265,7 +269,7 @@ class _BaseLevelKDPAgent(LearningAgent):
             new_epsilon_lower_k_level = cast(float,new_epsilon_lower_k_level)
             self.opponent.update_epsilon(new_epsilon_lower_k_level, new_epsilon_lower_k_level)
     
-class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
+class LevelK_TMDP_DP_Agent_Stationary(_BaseLevelK_TMDP_DP_Agent):
     """
     A Level-K DP agent that assumes a stationary environment.
 
@@ -319,8 +323,10 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
     def _clear_policy_cache_recursive(self):
         """
         Clears the policy cache for this agent and all agents
-        down its cognitive hierarchy.
+        down its cognitive hierarchy. This is essential to call before each
+        new `act` or `update` to ensure policies are not stale.
         """
+
         self._opponent_policy_cache.clear()
         if self.k > 1 and self.opponent:
             # Recursively call the clear method on the opponent model
@@ -376,9 +382,11 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         """
         Efficiently calculates the expected future value for an array of next states.
 
+        Calculates the expected value E[V(s')] for an array of next states.
+
         For each next state s', it computes E_{p(b'|s')}[V(s', b')], which is the
-        value of s' averaged over the opponent's next action b'. This uses an
-        optimization to only compute the value for unique next states.
+        value of s' averaged over the opponent's predicted next action b'. This
+        uses an optimization to compute the value only for reachable states.
 
         Args:
             s_prime_array: An array of potential next states (s').
@@ -429,7 +437,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         
         # Calculate the total Q-value for each of our actions by marginalizing
         # over the opponent's predicted policy.
-        # Q(s, a) = E_{b~pi_opp}[ R(s,a,b) + gamma * V(s') ]
+        # Q(s,a) = Σ_b [ p(b|s) * E[R(s,a,b) + γ * V(s')] ]
         total_action_values = np.dot(expected_self_rewards_intended, opponent_policy_in_obs) + \
                               self.gamma * np.dot(weighted_sum_future_V, opponent_policy_in_obs)
         
@@ -461,7 +469,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
 
     def act(self, obs:State, env=None) -> Action:
         """
-        Selects an action based on the epsilon-greedy policy.
+        Selects an action based on agent's own policy.
         """
         # Clear the policy cache at the start of the decision-making process.
         self._clear_policy_cache_recursive()
@@ -483,7 +491,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         # Clear the policy cache at the start of the update process.
         self._clear_policy_cache_recursive()
 
-        # Determine which action the opponent took from the action pair.
+        # Identify the opponent's action based on player ID
         opponent_action_taken = actions[1] if self.player_id == 0 else actions[0]
         
          # --- Update Opponent Model ---
@@ -528,7 +536,9 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
 
         This 4D tensor gives the probability of a specific pair of *executed*
         actions (a_self_exec, a_opp_exec) occurring, given a pair of *intended*
-        actions (a_self_intend, a_opp_intend).
+        actions (a_self_intend, a_opp_intend). This model is state-independent
+        as it only relies on the fixed action execution probabilities from the env.
+        (Implementation is identical to the LevelK_MDP_DP_Agent_Stationary).
 
         Returns:
             A 4D np.ndarray with dimensions corresponding to:
@@ -571,7 +581,7 @@ class LevelKDPAgent_Stationary(_BaseLevelKDPAgent):
         return prob_self[:, np.newaxis, :, np.newaxis] * prob_opp[np.newaxis, :, np.newaxis, :]
 
 
-class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
+class LevelK_TMDP_DP_Agent_NonStationary(LevelK_TMDP_DP_Agent_Stationary):
     """
     A Level-K DP agent for non-stationary environments.
 
@@ -579,6 +589,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
     probabilities (e.g., `env.player_0_execution_prob`) can change over time.
     It adapts by recalculating the transition probability tensor before every
     action selection.
+    (Implementation is identical to the LevelK_MDP_DP_Agent_NonStationary).
     
     Attributes: 
         Check parent
@@ -602,7 +613,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
         if self.k > 1 and self.opponent:
             # Check if is intialized
             assert self.opponent is not None, "Opponent model must be set for Level > 1 agents."
-            opponent_model = cast(LevelKDPAgent_NonStationary, self.opponent)
+            opponent_model = cast(LevelK_TMDP_DP_Agent_NonStationary, self.opponent)
             
             opponent_model.recalculate_transition_model(env)
 
@@ -620,7 +631,7 @@ class LevelKDPAgent_NonStationary(LevelKDPAgent_Stationary):
         return super().act(obs, env)
 
 
-class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
+class LevelK_TMDP_DP_Agent_Dynamic(LevelK_TMDP_DP_Agent_Stationary):
     """
     A Level-K DP agent that learns the environment's transition model online.
 
@@ -628,6 +639,10 @@ class LevelKDPAgent_Dynamic(LevelKDPAgent_Stationary):
     a state-dependent model P(a_self_exec, a_opp_exec | a_self_exec, a_opp_exec , state) by maintaining
     Dirichlet counts for transition outcomes. This makes it suitable for
     environments with unknown transition dynamics.
+    (Implementation is identical to the LevelK_MDP_DP_Agent_Dynamic).
+    
+    Attributes: 
+        Check parent
     """
     
     def __init__(self, k: int, action_space: np.ndarray, opponent_action_space: np.ndarray, lower_level_k_epsilon: float,

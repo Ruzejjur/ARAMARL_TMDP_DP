@@ -1,10 +1,11 @@
+import logging
 import numpy as np
 import copy
 from tqdm.notebook import tqdm
 
 from typing import Optional
 
-from .level_k_dp import LevelKDPAgent_Stationary
+from .tmdp_dp import LevelK_TMDP_DP_Agent_Stationary
 from .heuristic import ManhattanAgent
 from .base import LearningAgent
 
@@ -24,7 +25,7 @@ class DPAgent_PerfectModel(LearningAgent):
 
     This agent acts as an offline solver. It first computes the opponent's
     policy for every state. It then combines this policy with the environment's
-    base transition dynamics to create a state-dependent transition model.
+    base transition dynamics to create a perfect transition model.
     Finally, it runs value iteration on V(s) to find the optimal value function
     and extracts the corresponding deterministic policy.
     """
@@ -67,13 +68,13 @@ class DPAgent_PerfectModel(LearningAgent):
         # mapped to resulting s'. 
         self.s_prime_lookup, self.r_lookup  = self._precompute_lookups()
         
-        print("Pre-computing the perfect opponent policy table...")
+        logging.info("Pre-computing the perfect opponent policy table...")
         self.opponent_policy_table = self._precompute_opponent_policy()
-        print("Opponent policy table finished.")
+        logging.info("Opponent policy table finished.")
         
         # Pre-calculate the state-independent execution probability tensor:
         # P(a_self_exec, a_opp_exec | a_self_intend)
-        self.probab_exec_tensor_opponent_action_independent = self._calculate_execution_probabilities(env)
+        self.state_dependent_transition_tensor = self._calculate_execution_probabilities(env)
         
         # Value iteration termination critaria
         self.termination_criterion = termination_criterion
@@ -315,16 +316,16 @@ class DPAgent_PerfectModel(LearningAgent):
         
         probab_exec_tensor = prob_self[:, np.newaxis, :, np.newaxis] * prob_opp[np.newaxis, :, np.newaxis, :]
         
-        # --- Calculate opponent action independent and state dependent probability execution tensor
+        # --- Calculate opponent action independent and state dependent probability execution tensor ---
         # \sum_{a_o_int}P(a_s_exec, a_o_exec | a_s_int, a_o_int)p(a_o_int| s)
-        probab_exec_tensor_opponent_action_independent = np.einsum(
+        state_dependent_transition_tensor = np.einsum(
             'ijlk, sj -> silk', 
             probab_exec_tensor, 
             self.opponent_policy_table, 
             optimize=True
         )
         
-        return probab_exec_tensor_opponent_action_independent
+        return state_dependent_transition_tensor
     
     def _extract_optimal_policy(self):
         """
@@ -332,20 +333,20 @@ class DPAgent_PerfectModel(LearningAgent):
         extracting the agents action which maximises the value in each state.
         """
         
-        print("Extracting optimal policy...")
+        logging.info("Extracting optimal policy...")
         for s in range(self.n_states):
             if not self._is_terminal_state(s):
                 rewards_executed = self.r_lookup[s, :, :]
                 s_primes_executed = self.s_prime_lookup[s, :, :]
                 
-                prob_tensor_for_state_s = self.probab_exec_tensor_opponent_action_independent[s, :, :, :]
+                prob_tensor_for_state_s = self.state_dependent_transition_tensor[s, :, :, :]
                 
                 q_values_for_actions = np.einsum(
                     'ilk,lk->i', prob_tensor_for_state_s,
                     rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True
                 )
                 self.optim_policy_table[s] = np.argmax(q_values_for_actions)
-        print("Optimal policy extracted.")
+        logging.info("Optimal policy extracted.")
 
 
     def run_value_iteration(self, termination_criterion: float, value_iteration_max_num_of_iter: int):
@@ -361,7 +362,7 @@ class DPAgent_PerfectModel(LearningAgent):
                            maximum change in the value function is less than termination_criterion.
             value_iteration_max_num_of_iter (int): The maximum number of iterations to perform.
         """
-        print("Starting offline in-place value iteration on V(s)...")
+        logging.info("Starting offline in-place value iteration on V(s)...")
         
         progress_bar = tqdm(range(value_iteration_max_num_of_iter), desc="Value Iteration", unit="it")
         
@@ -382,7 +383,7 @@ class DPAgent_PerfectModel(LearningAgent):
                 s_primes_executed = self.s_prime_lookup[s, :, :]
                 
                 # Extract probability of transition for the current state s
-                prob_tensor_for_state_s = self.probab_exec_tensor_opponent_action_independent[s, :, :, :]
+                prob_tensor_for_state_s = self.state_dependent_transition_tensor[s, :, :, :]
                 
                 q_values_for_actions = np.einsum('ikl,lk->i', prob_tensor_for_state_s ,rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True)
                 
@@ -398,11 +399,11 @@ class DPAgent_PerfectModel(LearningAgent):
             
             # --- Convergence Check and Policy extraction ---
             if delta < termination_criterion:
-                print(f"\nValue iteration converged after {i + 1} iterations.")
+                logging.info(f"\nValue iteration converged after {i + 1} iterations.")
                 # Final policy extraction pass
                 return
             
-        print(f"Value iteration did not converge after {value_iteration_max_num_of_iter} iterations.")
+        logging.info(f"Value iteration did not converge after {value_iteration_max_num_of_iter} iterations.")
 
     def act(self, obs: State, env=None) -> Action:
         """
@@ -433,7 +434,7 @@ class DPAgent_PerfectModel(LearningAgent):
         
 
 
-class TMDP_DPAgent_PerfectModel(LevelKDPAgent_Stationary):
+class TMDP_DPAgent_PerfectModel(LevelK_TMDP_DP_Agent_Stationary):
     """
     Computes the optimal policy (a best response) against a known, fixed opponent
     policy using offline value iteration.
@@ -444,7 +445,7 @@ class TMDP_DPAgent_PerfectModel(LevelKDPAgent_Stationary):
     against that opponent's fixed policy. Finally, it extracts a deterministic
     optimal policy.
 
-    It inherits from `LevelKDPAgent_Stationary` to reuse the efficient,
+    It inherits from `LevelK_TMDP_DP_Agent_Stationary` to reuse the efficient,
     vectorized model-handling and Bellman update logic.
 
     Attributes:
@@ -482,9 +483,9 @@ class TMDP_DPAgent_PerfectModel(LevelKDPAgent_Stationary):
 
         # --- Offline Solving Pipeline ---
         # Pre-compute the opponent's full, fixed policy for every state.
-        print("Pre-computing the perfect opponent policy table...")
+        logging.info("Pre-computing the perfect opponent policy table...")
         self.opponent_policy_table = self._precompute_opponent_policy()
-        print("Opponent policy table finished.")
+        logging.info("Opponent policy table finished.")
 
         # This table will store the final optimal policy π*(s).
         self.optim_policy_table = np.zeros(self.n_states, dtype=int)
@@ -554,7 +555,7 @@ class TMDP_DPAgent_PerfectModel(LevelKDPAgent_Stationary):
                            maximum change in the value function is less than termination_criterion.
             value_iteration_max_num_of_iter (int): The maximum number of iterations to perform.
         """
-        print("Starting offline in-place value iteration on V(s, b)...")
+        logging.info("Starting offline in-place value iteration on V(s, b)...")
         
         progress_bar = tqdm(range(value_iteration_max_num_of_iter), desc="Value Iteration", unit="it")
         
@@ -603,10 +604,10 @@ class TMDP_DPAgent_PerfectModel(LevelKDPAgent_Stationary):
             
             # --- Convergence Check ---
             if delta < termination_criterion:
-                print(f"\nValue iteration converged after {i + 1} iterations.")
+                logging.info(f"\nValue iteration converged after {i + 1} iterations.")
                 return
 
-        print(f"Value iteration did not converge after {value_iteration_max_num_of_iter} iterations.")
+        logging.info(f"Value iteration did not converge after {value_iteration_max_num_of_iter} iterations.")
 
 
     def _extract_optimal_policy(self):
@@ -618,13 +619,13 @@ class TMDP_DPAgent_PerfectModel(LevelKDPAgent_Stationary):
         the parent's `optim_act` method, which performs exactly this calculation.
         """
         
-        print("Extracting optimal policy...")
+        logging.info("Extracting optimal policy...")
         for s in range(self.n_states):
             # The parent's optim_act function finds the action 'a' that maximizes
             # the expected Q-value, marginalized over the opponent's policy at state 's'.
             # This is exactly what we need to determine the best response at each state.
             self.optim_policy_table[s] = self.optim_act(s)
-        print("Optimal policy extracted.")
+        logging.info("Optimal policy extracted.")
 
     def act(self, obs: State, env=None) -> Action:
         """

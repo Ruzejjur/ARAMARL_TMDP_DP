@@ -13,14 +13,24 @@ import yaml
 import numpy as np
 from tqdm.notebook import tqdm
 import os
+import logging 
+import sys
 import inspect
 from datetime import datetime
+
 
 # Import your custom modules
 from engine_DP import CoinGame
 import agents
 from utils.exploration_schedule_utils import linear_epsilon_decay
 from utils.plot_utils import plot
+
+# Directing log messages of level INFO and higher to the console.
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(levelname)s - %(message)s',
+#     stream=sys.stdout  # Explicitly direct logs to standard output
+# )
 
 def load_config(config_path: str) -> dict:
     """
@@ -220,7 +230,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
     run_dir_name = f"{experiment_name}_{timestamp}"
     results_path = os.path.join(exp_settings['results_dir'], run_dir_name)
     os.makedirs(results_path, exist_ok=True)
-    print(f"Results for this run will be saved in: {results_path}")
+    logging.info("Results for this run will be saved in: %s", results_path)
     
     # Initialize the single environment instance.
     env = CoinGame(**env_settings['params'])
@@ -296,8 +306,29 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
 
     # --- Experiment Loop (for multiple independent runs) ---
     for experiment_num in tqdm(range(exp_settings['num_runs']), desc="Experiment runs"):
-        np.random.seed(experiment_num) # for reproducibility
-        
+        # Check for run_seed
+        seed = exp_settings.get('run_seed')
+        if seed is not None:
+            # Add experiment_num to the base seed for different, but reproducible runs
+            current_seed = seed + experiment_num
+            np.random.seed(current_seed)
+            
+            # --- THIS IS THE IMPROVED LOGGING CALL ---
+            # It logs at the INFO level, which can be easily filtered.
+            logging.info(
+                "Running experiment %d/%d with seed: %d",
+                experiment_num + 1,
+                exp_settings['num_runs'],
+                current_seed
+            )
+        else:
+            # Using logging.warning is also better for consistency.
+            logging.warning(
+                "'run_seed' not found in config. Experiment %d/%d will run with a non-reproducible random seed.",
+                experiment_num + 1,
+                exp_settings['num_runs']
+            )
+
         # Trajectory log for this experiment
         trajectory_log_single_experiment = []
         
@@ -410,7 +441,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
     plot(all_rewards_p1, all_rewards_p2, 
          moving_average_window_size=config['plotting_settings']['moving_average_window'], 
          dir=plot_path)
-    print(f"Plot saved to {plot_path}.png")
+    logging.info("Plot saved to %s.png", plot_path)
     
     # Save trajectory logs if enabled.
     if log_trajectory:
@@ -419,16 +450,19 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
         np.save(traj_path, save_array, allow_pickle=True)
     
     # Save accumulated reward data for each experiment
-    print("Saving rewards of both players.")
-    np.save(os.path.join(results_path, 'rewards_p1.npy'), np.array(all_rewards_p1))
-    np.save(os.path.join(results_path, 'rewards_p2.npy'), np.array(all_rewards_p2))
-
+    p1_rewards_path = os.path.join(results_path, 'rewards_p1.npy')
+    np.save(p1_rewards_path, np.array(all_rewards_p1))
+    logging.info("Rewards for player 1 saved to %s.", p1_rewards_path)
+    
+    p2_rewards_path = os.path.join(results_path, 'rewards_p2.npy')
+    np.save(p2_rewards_path, np.array(all_rewards_p2))
+    logging.info("Rewards for player 2 saved to %s.", p2_rewards_path)
     
     # Save the configuration file used for this run for full reproducibility.
     config_path = os.path.join(results_path, 'config.yaml')
     with open(config_path, 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
-    print(f"Configuration saved to {config_path}")
+    logging.info("Configuration saved to %s", config_path)
     
     
     return results_path

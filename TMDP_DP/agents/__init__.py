@@ -1,3 +1,5 @@
+import logging
+
 # --- Utility Functions ---
 # Expose helper functions if they are needed externally,
 # otherwise they can be imported within the modules themselves.
@@ -33,12 +35,20 @@ from .level_k_q import (
     LevelKQAgentSoftmax
 )
 
-# --- Level-K Dynamic Programming Agents ---
-# Import the DP agent family
-from .level_k_dp import (
-    LevelKDPAgent_Stationary,
-    LevelKDPAgent_NonStationary,
-    LevelKDPAgent_Dynamic
+# --- Level-K MDP Dynamic Programming Agents ---
+# Import the MDP DP agent family
+from .mdp_dp import (
+    LevelK_MDP_DP_Agent_Stationary,
+    LevelK_MDP_DP_Agent_NonStationary,
+    LevelK_MDP_DP_Agent_Dynamic
+)
+
+# --- Level-K TMDP Dynamic Programming Agents ---
+# Import the TMDP DP agent family
+from .tmdp_dp import (
+    LevelK_TMDP_DP_Agent_Stationary,
+    LevelK_TMDP_DP_Agent_NonStationary,
+    LevelK_TMDP_DP_Agent_Dynamic
 )
 
 # --- Offline Solver Agents ---
@@ -48,4 +58,4 @@ from .offline_solvers import (
     DPAgent_PerfectModel
 )
 
-print("Agents package successfully initialized.")
+logging.info("Agents package successfully initialized.")

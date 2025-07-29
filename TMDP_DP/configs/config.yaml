@@ -1,8 +1,9 @@
 
 experiment_settings:
   name: "Test"
-  num_runs: 1     # How many times to repeat the experiment with different seeds
-  num_episodes: 10000 # Number of episodes per run
+  num_runs: 5     # How many times to repeat the experiment with different seeds
+  num_episodes: 100 # Number of episodes per run
+  run_seed: 42 # Intial seed for runs
   results_dir: "results/" # Directory to save plots and data
 
 environment_settings:
