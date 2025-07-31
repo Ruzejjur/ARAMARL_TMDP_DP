@@ -14,9 +14,9 @@ import numpy as np
 from tqdm.notebook import tqdm
 import os
 import logging 
-import sys
 import inspect
 from datetime import datetime
+import shutil
 
 
 # Import your custom modules
@@ -32,7 +32,7 @@ from utils.plot_utils import plot
 #     stream=sys.stdout  # Explicitly direct logs to standard output
 # )
 
-def load_config(config_path: str) -> dict:
+def load_config(config_file_path: str) -> dict:
     """
     Loads and returns the YAML configuration file.
 
@@ -40,13 +40,19 @@ def load_config(config_path: str) -> dict:
     environment.
 
     Args:
-        config_path (str): The file path to the YAML configuration file.
+        config_file_path (str): The file path to the YAML configuration file.
 
     Returns:
         dict: A dictionary containing the parsed configuration settings.
     """
-    with open(config_path, 'r') as f:
+    
+    
+    logging.info(f"Loading configuration from: {config_file_path}")
+    
+    with open(config_file_path, 'r') as f:
         return yaml.safe_load(f)
+    
+    logging.info("Configuration loaded successfully. Starting experiment...")
     
 def create_agent(agent_config: dict, common_params: dict) -> agents.BaseAgent:
     """
@@ -202,7 +208,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
 
     return episode_rewards_p1, episode_rewards_p2, trajectory_log
 
-def run_experiment(config:dict, log_trajectory: bool = False) -> str:
+def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     """
     Main function to run the entire set of experiments based on the config.
 
@@ -211,7 +217,7 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
     looping through episodes, and saving the final results and plots.
 
     Args:
-        config (dict): The full experiment configuration dictionary.
+        config_file_path (str): Path to the YAML experiment configuration file.
         log_trajectory (bool): If True, a detailed log of the last episode of
                                each run is saved for animation.
 
@@ -220,6 +226,9 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
     """
     
     # --- Setup ---
+    # Load full experiment configuration
+    config = load_config(config_file_path=config_file_path)
+    
     exp_settings = config['experiment_settings']
     env_settings = config['environment_settings']
     agent_configs = config['agent_settings']
@@ -459,10 +468,11 @@ def run_experiment(config:dict, log_trajectory: bool = False) -> str:
     logging.info("Rewards for player 2 saved to %s.", p2_rewards_path)
     
     # Save the configuration file used for this run for full reproducibility.
-    config_path = os.path.join(results_path, 'config.yaml')
-    with open(config_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
-    logging.info("Configuration saved to %s", config_path)
+    shutil.copy(config_file_path, results_path)
+    
+    # The saved file will have its original name inside the results_path directory.
+    saved_config_path = os.path.join(results_path, os.path.basename(config_file_path))
+    logging.info("Configuration file copied for reproducibility to %s", saved_config_path)
     
     
     return results_path

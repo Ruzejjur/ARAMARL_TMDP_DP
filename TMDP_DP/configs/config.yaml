@@ -1,5 +1,4 @@
-comment: Testing LevelK_MDP_DP_Agent_Stationary vs. LevelK_TMDP_DP_Agent_Stationary to see which implementation performs better. 
-         Both are set to the same parameters and level 1. With bigger grid.
+comment: Testing if the result from this run, containing the added reward structure is the same as identical run without it.
 
 
 experiment_settings:
@@ -15,6 +14,33 @@ environment_settings:
     grid_size: 7
     max_steps: 20000
     push_distance: 2
+    rewards:
+      # --- General Penalties ---
+      step_penalty: -0.1                   # Penalty incurred by each agent on every step.
+      out_of_bounds_penalty_delta: -0.5          # Penalty for attempting to move off the grid.
+      collision_penalty_delta: -0.05             # Penalty for attempting to move to the same cell as the other player.
+
+      # --- Push-related Rewards/Penalties ---
+      push_reward_delta: 0.4                     # Reward for successfully pushing an adjacent opponent.
+      push_penalty_delta: -0.2                   # Penalty for being pushed by an opponent.
+      push_but_not_adjacent_penalty_delta: -0.05 # Penalty for using the 'push' action when not next to the opponent.
+      both_push_penalty_delta: -0.05             # Penalty applied to both players if they push each other simultaneously.
+
+      # --- Coin-related Rewards/Penalties ---
+      coin_reward_delta: 2.0                     # Reward for collecting a coin.
+      coin_steal_penalty_delta: -0.5             # Penalty for the other player when one player collects a coin.
+      contested_coin_penalty_delta: -0.2         # Penalty applied to both players if they try to collect same coin at the same time.
+
+      # --- Terminal (End of Game) Rewards/Penalties ---
+      win_reward: 10.0                     # Reward for winning the game (collecting both coins).
+      loss_penalty: -10.0                  # Penalty for losing the game.
+      draw_penalty: -5.0                   # Penalty for a draw (both coins collected, but neither player won).
+
+      # --- Timeout-related Rewards/Penalties (if max_steps is reached) ---
+      timeout_penalty_delta: -2.0                # Base penalty applied to both players if the game times out.
+      timeout_lead_bonus_delta: 1.0              # Additional bonus for the player with more coins at timeout.
+      timeout_trail_penalty_delta: -1.0          # Additional penalty for the player with fewer coins at timeout.
+
 
 agent_settings:
   player_1:
@@ -23,7 +49,7 @@ agent_settings:
       gamma: 0.95
       epsilon: 1.0
       initial_V_value: 0
-      k: 3
+      k: 1
       lower_level_k_epsilon: 0.1
 
     epsilon_decay_agent:
@@ -43,7 +69,7 @@ agent_settings:
       gamma: 0.95
       epsilon: 1.0
       initial_V_value: 0
-      k: 3
+      k: 1
       lower_level_k_epsilon: 0.1
 
     epsilon_decay_agent:

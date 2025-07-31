@@ -176,7 +176,7 @@ class _BaseLevelK_MDP_DP_Agent(LearningAgent):
             - r_lookup (np.ndarray): Table of rewards for the current agent.
         """
         
-        desc_str = f"Pre-computing lookups for Level-{self.k} DP Agent (Player {"DM" if self.player_id == 0 else "Adv"})"
+        desc_str = f"Pre-computing lookups for Level-{self.k} MDP DP Agent (Player {"DM" if self.player_id == 0 else "Adv"})"
         
         s_prime_lookup = np.zeros((self.n_states, self.num_self_actions, self.num_opponent_actions), dtype=int)
         r_lookup = np.zeros((self.n_states, self.num_self_actions, self.num_opponent_actions), dtype=float)

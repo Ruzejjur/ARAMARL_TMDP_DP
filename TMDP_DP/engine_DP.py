@@ -45,34 +45,8 @@ class CoinGame():
         available_push_actions (np.ndarray): Array of push actions [0, 1].
         combined_actions (np.ndarray): All possible combinations of (move, push) actions.
     """
-    
-    # --- Reward and Penalty Constants ---
-        # NOTE: _DELTA suffix indicates the value is added to the running reward total.
-    #       Values without the suffix will overwrite the running total.
-    _STEP_PENALTY = -0.1
-    
-    _PUSH_REWARD_DELTA = 0.4
-    _PUSH_PENALTY_DELTA = -0.2
-    _PUSH_BUT_NOT_ADJACENT_PENALTY_DELTA = -0.05
-    _BOTH_PUSH_PENALTY_DELTA = -0.05
-    
-    _COLLISION_PENALTY_DELTA = -0.05
-    _OUT_OF_BOUNDS_PENALTY_DELTA = -0.5
-    
-    _COIN_REWARD_DELTA = 2.0
-    _COIN_STEAL_PENALTY_DELTA = -0.5
-    _CONTESTED_COIN_PENALTY_DELTA = -0.2
-    
-    _WIN_REWARD = 10
-    _LOSS_PENALTY = -10
-    _DRAW_PENALTY = -5
-    
-    _TIMEOUT_PENALTY_DELTA = -2
-    _TIMEOUT_LEAD_BONUS_DELTA = 1
-    _TIMEOUT_TRAIL_PENALTY_DELTA = -1
-    
 
-    def __init__(self, max_steps: int, grid_size: int, push_distance: int):
+    def __init__(self, max_steps: int, grid_size: int, push_distance: int, rewards: dict):
         """
         Initializes the CoinGame environment.
 
@@ -84,6 +58,39 @@ class CoinGame():
         self.max_steps = max_steps
         self.grid_size = grid_size
         self.push_distance = push_distance
+        
+        
+        # --- Assign rewards from config to instance variables ---
+
+        try:
+            self.step_penalty = rewards['step_penalty']
+            
+            self.push_reward_delta = rewards['push_reward_delta']
+            self.push_penalty_delta = rewards['push_penalty_delta']
+            self.push_but_not_adjacent_penalty_delta = rewards['push_but_not_adjacent_penalty_delta']
+            self.both_push_penalty_delta = rewards['both_push_penalty_delta']
+            
+            self.collision_penalty_delta = rewards['collision_penalty_delta']
+            self.out_of_bounds_penalty_delta = rewards['out_of_bounds_penalty_delta']
+            
+            self.coin_reward_delta = rewards['coin_reward_delta']
+            self.coin_steal_penalty_delta = rewards['coin_steal_penalty_delta']
+            self.contested_coin_penalty_delta = rewards['contested_coin_penalty_delta']
+            
+            self.win_reward = rewards['win_reward']
+            self.loss_penalty = rewards['loss_penalty']
+            self.draw_penalty = rewards['draw_penalty']
+            
+            self.timeout_penalty_delta = rewards['timeout_penalty_delta']
+            self.timeout_lead_bonus_delta = rewards['timeout_lead_bonus_delta']
+            self.timeout_trail_penalty_delta = rewards['timeout_trail_penalty_delta']
+        
+        except KeyError as e: 
+            raise KeyError(
+                        f"The required reward key {e} was not found. "
+                        "Please ensure all reward values are defined under "
+                        "'environment_settings.params.rewards' in your config.yaml file."
+                    )
         
         # --- Action Space Definition ---
         self.available_move_actions = np.array([0, 1, 2, 3])  # 0:Up, 1:Right, 2:Down, 3:Left
@@ -201,15 +208,15 @@ class CoinGame():
             # --- Resolve collection ---
             if p0_on_c and not p1_on_c:
                 update_collection_state(coin_index == 0, p0_collects=True, p1_collects=False)
-                reward_delta_0 += self._COIN_REWARD_DELTA
-                reward_delta_1 += self._COIN_STEAL_PENALTY_DELTA
+                reward_delta_0 += self.coin_reward_delta
+                reward_delta_1 += self.coin_steal_penalty_delta
             elif p1_on_c and not p0_on_c:
                 update_collection_state(coin_index == 0, p0_collects=False, p1_collects=True)
-                reward_delta_1 += self._COIN_REWARD_DELTA
-                reward_delta_0 += self._COIN_STEAL_PENALTY_DELTA
+                reward_delta_1 += self.coin_reward_delta
+                reward_delta_0 += self.coin_steal_penalty_delta
             elif p0_on_c and p1_on_c: # Contested coin
-                reward_delta_0 += self._CONTESTED_COIN_PENALTY_DELTA
-                reward_delta_1 += self._CONTESTED_COIN_PENALTY_DELTA
+                reward_delta_0 += self.contested_coin_penalty_delta
+                reward_delta_1 += self.contested_coin_penalty_delta
             
             return reward_delta_0, reward_delta_1
 
@@ -312,7 +319,7 @@ class CoinGame():
         self.step_count += 1
         
         # Set reward for step
-        reward_0, reward_1 = self._STEP_PENALTY, self._STEP_PENALTY
+        reward_0, reward_1 = self.step_penalty, self.step_penalty
         
         # Store original positions for push logic
         original_pos_0 = self.player_0_pos.copy()
@@ -331,29 +338,29 @@ class CoinGame():
         pushed_0_this_step, pushed_1_this_step = False, False
         if actual_push_0 and actual_push_1:  # Both push
             if players_are_adjacent:
-                reward_0 += self._BOTH_PUSH_PENALTY_DELTA
-                reward_1 += self._BOTH_PUSH_PENALTY_DELTA
+                reward_0 += self.both_push_penalty_delta
+                reward_1 += self.both_push_penalty_delta
             else: 
-                reward_0 += self._PUSH_BUT_NOT_ADJACENT_PENALTY_DELTA
-                reward_1 += self._PUSH_BUT_NOT_ADJACENT_PENALTY_DELTA
+                reward_0 += self.push_but_not_adjacent_penalty_delta
+                reward_1 += self.push_but_not_adjacent_penalty_delta
         elif actual_push_0:  # Player 0 pushes
             if players_are_adjacent:
                 push_direction = original_pos_1 - original_pos_0
                 self.player_1_pos = np.clip(original_pos_1 + self.push_distance * push_direction, 0, self.grid_size - 1)
-                reward_0 += self._PUSH_REWARD_DELTA
-                reward_1 += self._PUSH_PENALTY_DELTA
+                reward_0 += self.push_reward_delta
+                reward_1 += self.push_penalty_delta
                 pushed_1_this_step = True
             else:
-                reward_0 += self._PUSH_BUT_NOT_ADJACENT_PENALTY_DELTA
+                reward_0 += self.push_but_not_adjacent_penalty_delta
         elif actual_push_1:  # Player 1 pushes
             if players_are_adjacent:
                 push_direction = original_pos_0 - original_pos_1
                 self.player_0_pos = np.clip(original_pos_0 + self.push_distance * push_direction, 0, self.grid_size - 1)
-                reward_1 += self._PUSH_REWARD_DELTA
-                reward_0 += self._PUSH_PENALTY_DELTA
+                reward_1 += self.push_reward_delta
+                reward_0 += self.push_penalty_delta
                 pushed_0_this_step = True
             else:
-                reward_1 += self._PUSH_BUT_NOT_ADJACENT_PENALTY_DELTA
+                reward_1 += self.push_but_not_adjacent_penalty_delta
         
         # --- Apply Movement ---
         
@@ -365,7 +372,7 @@ class CoinGame():
             candidate_pos = original_pos_0 + self._deltas[actual_move_0]
             # Resolve out of bounds movement
             if np.any(candidate_pos < 0) or np.any(candidate_pos >= self.grid_size):
-                reward_0 += self._OUT_OF_BOUNDS_PENALTY_DELTA
+                reward_0 += self.out_of_bounds_penalty_delta
             new_pos_0 = np.clip(candidate_pos, 0, self.grid_size - 1)
             
         if not pushed_1_this_step:
@@ -373,7 +380,7 @@ class CoinGame():
             candidate_pos = original_pos_1 + self._deltas[actual_move_1]
             # Resolve out of bounds movement
             if np.any(candidate_pos < 0) or np.any(candidate_pos >= self.grid_size):
-                reward_1 += self._OUT_OF_BOUNDS_PENALTY_DELTA
+                reward_1 += self.out_of_bounds_penalty_delta
             new_pos_1 = np.clip(candidate_pos, 0, self.grid_size - 1)
         
         # Resolve collisions: if agents move to the same spot, they bounce back.
@@ -381,8 +388,8 @@ class CoinGame():
             self.player_0_pos = new_pos_0
             self.player_1_pos = new_pos_1
         else:
-            reward_0 += self._COLLISION_PENALTY_DELTA
-            reward_1 += self._COLLISION_PENALTY_DELTA
+            reward_0 += self.collision_penalty_delta
+            reward_1 += self.collision_penalty_delta
             
         
         # --- Coin collection logic ---
@@ -407,11 +414,11 @@ class CoinGame():
         is_draw = (not self.coin0_available and not self.coin1_available) and not p0_wins and not p1_wins
 
         if p0_wins:
-            reward_0, reward_1, self.done = self._WIN_REWARD, self._LOSS_PENALTY, True
+            reward_0, reward_1, self.done = self.win_reward, self.loss_penalty, True
         elif p1_wins:
-            reward_0, reward_1, self.done = self._LOSS_PENALTY, self._WIN_REWARD, True
+            reward_0, reward_1, self.done = self.loss_penalty, self.win_reward, True
         elif is_draw:
-            reward_0, reward_1, self.done = self._DRAW_PENALTY, self._DRAW_PENALTY, True
+            reward_0, reward_1, self.done = self.draw_penalty, self.draw_penalty, True
             
         # Check for timeout
         if not self.done and self.step_count >= self.max_steps:
@@ -419,13 +426,13 @@ class CoinGame():
             p0_coins = int(self.player_0_collected_coin0) + int(self.player_0_collected_coin1)
             p1_coins = int(self.player_1_collected_coin0) + int(self.player_1_collected_coin1)
             if p0_coins > p1_coins:
-                reward_0 += self._TIMEOUT_LEAD_BONUS_DELTA
-                reward_1 += self._TIMEOUT_TRAIL_PENALTY_DELTA
+                reward_0 += self.timeout_lead_bonus_delta
+                reward_1 += self.timeout_trail_penalty_delta
             elif p1_coins > p0_coins:
-                reward_1 += self._TIMEOUT_LEAD_BONUS_DELTA
-                reward_0 += self._TIMEOUT_TRAIL_PENALTY_DELTA
+                reward_1 += self.timeout_lead_bonus_delta
+                reward_0 += self.timeout_trail_penalty_delta
             else:
-                reward_0 += self._TIMEOUT_PENALTY_DELTA
-                reward_1 += self._TIMEOUT_PENALTY_DELTA
+                reward_0 += self.timeout_penalty_delta
+                reward_1 += self.timeout_penalty_delta
 
         return self.get_state(), np.array([reward_0, reward_1]), self.done
