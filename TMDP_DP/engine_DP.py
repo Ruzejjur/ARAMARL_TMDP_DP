@@ -69,7 +69,7 @@ class CoinGame():
     
     _TIMEOUT_PENALTY_DELTA = -2
     _TIMEOUT_LEAD_BONUS_DELTA = 1
-    _TIMEOUT_LEAD_LOSS_DELTA = -1
+    _TIMEOUT_TRAIL_PENALTY_DELTA = -1
     
 
     def __init__(self, max_steps: int, grid_size: int, push_distance: int):
@@ -420,10 +420,10 @@ class CoinGame():
             p1_coins = int(self.player_1_collected_coin0) + int(self.player_1_collected_coin1)
             if p0_coins > p1_coins:
                 reward_0 += self._TIMEOUT_LEAD_BONUS_DELTA
-                reward_1 += self._TIMEOUT_LEAD_LOSS_DELTA
+                reward_1 += self._TIMEOUT_TRAIL_PENALTY_DELTA
             elif p1_coins > p0_coins:
                 reward_1 += self._TIMEOUT_LEAD_BONUS_DELTA
-                reward_0 += self._TIMEOUT_LEAD_LOSS_DELTA
+                reward_0 += self._TIMEOUT_TRAIL_PENALTY_DELTA
             else:
                 reward_0 += self._TIMEOUT_PENALTY_DELTA
                 reward_1 += self._TIMEOUT_PENALTY_DELTA

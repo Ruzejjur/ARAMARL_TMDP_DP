@@ -41,7 +41,6 @@ def plot(r0ss, r1ss, moving_average_window_size=1000, dir=None):
     """
     # Apply 'ggplot' style
     plt.style.use('ggplot')
-
     # Create figure and axis explicitly d
     fig, ax = plt.subplots()
 

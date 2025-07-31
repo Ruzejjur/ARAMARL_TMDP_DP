@@ -342,7 +342,7 @@ class MDP_DP_Agent_PerfectModel(LearningAgent):
                 prob_tensor_for_state_s = self.state_dependent_transition_tensor[s, :, :, :]
                 
                 q_values_for_actions = np.einsum(
-                    'ilk,lk->i', prob_tensor_for_state_s,
+                    'ikl,kl->i', prob_tensor_for_state_s,
                     rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True
                 )
                 self.optim_policy_table[s] = np.argmax(q_values_for_actions)
@@ -385,7 +385,7 @@ class MDP_DP_Agent_PerfectModel(LearningAgent):
                 # Extract probability of transition for the current state s
                 prob_tensor_for_state_s = self.state_dependent_transition_tensor[s, :, :, :]
                 
-                q_values_for_actions = np.einsum('ikl,lk->i', prob_tensor_for_state_s ,rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True)
+                q_values_for_actions = np.einsum('ikl,kl->i', prob_tensor_for_state_s ,rewards_executed + self.gamma * self.V[s_primes_executed], optimize=True)
                 
                 # The new value is the maximum Q-value over our possible actions.
                 v_s_new = np.max(q_values_for_actions)

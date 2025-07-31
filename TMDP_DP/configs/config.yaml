@@ -12,7 +12,7 @@ experiment_settings:
 environment_settings:
   class: "CoinGame"
   params:
-    grid_size: 15
+    grid_size: 7
     max_steps: 20000
     push_distance: 2
 
@@ -23,7 +23,7 @@ agent_settings:
       gamma: 0.95
       epsilon: 1.0
       initial_V_value: 0
-      k: 1
+      k: 3
       lower_level_k_epsilon: 0.1
 
     epsilon_decay_agent:
@@ -43,7 +43,7 @@ agent_settings:
       gamma: 0.95
       epsilon: 1.0
       initial_V_value: 0
-      k: 1
+      k: 3
       lower_level_k_epsilon: 0.1
 
     epsilon_decay_agent:
