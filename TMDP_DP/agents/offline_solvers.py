@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 import copy
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 from typing import Optional
 

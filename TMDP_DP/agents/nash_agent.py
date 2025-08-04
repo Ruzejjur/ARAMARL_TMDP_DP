@@ -1,8 +1,6 @@
-# --- START OF FILE agents/nash_agent.py ---
-
 import numpy as np
 from numpy.random import choice
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 import os
 import logging
 from typing import Optional

@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.random import choice
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 from typing import cast, Optional
 

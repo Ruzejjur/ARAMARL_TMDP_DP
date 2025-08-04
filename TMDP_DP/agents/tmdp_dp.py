@@ -2,7 +2,7 @@ import numpy as np
 from numpy.random import choice
 import copy
 from typing import cast, Optional
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 
 from .base import LearningAgent

@@ -11,7 +11,7 @@ hyperparameters, and environment settings without changing the core code.
 
 import yaml
 import numpy as np
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 import os
 import logging 
 import inspect
