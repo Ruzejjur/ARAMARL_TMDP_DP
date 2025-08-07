@@ -11,7 +11,7 @@ experiment_settings:
 environment_settings:
   class: "CoinGame"
   params:
-    grid_size: 7
+    grid_size: 3
     max_steps: 20000
     push_distance: 2
     rewards:
@@ -83,4 +83,5 @@ agent_settings:
       end: 0.1                 # The final epsilon value.
 
 plotting_settings:
+  reward_time_series_range: [9000,10000]
   moving_average_window: 1000

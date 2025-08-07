@@ -25,14 +25,18 @@ def moving_average(array, moving_average_window_size=3):
     # Divide by window size to obtain the moving average
     return ret[moving_average_window_size - 1:] / moving_average_window_size
 
-def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window_size=1000, dir=None):
+def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window_size, reward_time_series_range, dir=None):
     """
     Plot smoothed reward trajectories for two agents over multiple experiments.
 
     Parameters:
         r0ss (list of arrays): Rewards for Agent A across experiments.
         r1ss (list of arrays): Rewards for Agent B across experiments.
+        plot_title (str): Title of the plot.
+        moving_average_window_size(int): Size of right-aligned moving average window.
+        reward_time_series_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
         dir (str, optional): If provided, saves the plot to 'dir.png'.
+        interactive(bool, optional): If True, displays the plot interactively.
 
     Returns:
         None
@@ -45,15 +49,26 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
     N_EXP = len(r0ss)
 
     for i in range(N_EXP):
-        ax.plot(moving_average(r0ss[i], moving_average_window_size), 'b', alpha=0.05)
-        ax.plot(moving_average(r1ss[i], moving_average_window_size), 'r', alpha=0.05)
+        # Calculate the moving average for the full series
+        p0_reward_series = moving_average(r0ss[i], moving_average_window_size)
+        p1_reward_series = moving_average(r1ss[i], moving_average_window_size)
+        
+        x_axis = np.arange(moving_average_window_size - 1, len(r0ss[i]))
+        ax.plot(x_axis, p0_reward_series, 'b', alpha=0.05)
+        ax.plot(x_axis, p1_reward_series, 'r', alpha=0.05)
 
-    ax.plot(moving_average(np.mean(r0ss, axis=0), moving_average_window_size), 'b', alpha=0.5)
-    ax.plot(moving_average(np.mean(r1ss, axis=0), moving_average_window_size), 'r', alpha=0.5)
+    p0_average_reward_series = moving_average(np.mean(r0ss, axis=0), moving_average_window_size)
+    p1_average_reward_series = moving_average(np.mean(r1ss, axis=0), moving_average_window_size)
+    
+    x_axis_avg = np.arange(moving_average_window_size - 1, len(np.mean(r0ss, axis=0)))
+    ax.plot(x_axis_avg, p0_average_reward_series, 'b', alpha=0.5)
+    ax.plot(x_axis_avg, p1_average_reward_series, 'r', alpha=0.5)
 
-    ax.set_xlabel('episode')
+    ax.set_xlabel('Episode')
     ax.set_ylabel('Cumulative reward per episode')
     ax.set_title(plot_title)
+    
+    ax.set_xlim(reward_time_series_range)
 
     custom_lines = [Line2D([0], [0], color='b', label='DM'),
                     Line2D([0], [0], color='r', label='Adversary')]
@@ -61,8 +76,19 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
 
     if dir is not None:
         # Set figure background to transparent
-        fig.patch.set_alpha(0.0)
-        fig.savefig(f"{dir}.png", transparent=False, bbox_inches='tight')
+        #fig.patch.set_alpha(0.0) # jpeg does not support transparency
+        fig.savefig(
+            f"{dir}.jpg",
+            format='jpeg',
+            dpi=1200,
+            bbox_inches='tight',
+            pil_kwargs={
+                "quality": 90, # values above 95 remove compresion
+                "optimize": True,
+                "progressive": False
+            }
+        )
+
         
         
 def animate_trajectory_from_log(trajectory_log, grid_size=4, fps=4, dpi=100):

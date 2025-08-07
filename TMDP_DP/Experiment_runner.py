@@ -135,6 +135,14 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
         A tuple containing:
         - episode_cumulative_full_reward_p1 (float): Total reward for player 1 in the episode.
         - episode_cumulative_full_reward_p2 (float): Total reward for player 2 in the episode.
+        - episode_cumulative_positive_reward_p1 (float): Only positive rewards for player 1 in the episode.
+        - episode_cumulative_positive_reward_p2 (float): Only positive rewards for player 2 in the episode.
+        - episode_cumulative_negative_reward_p1 (float): Only negative rewards for player 1 in the episode.
+        - episode_cumulative_negative_reward_p2 (float): Only negative rewards for player 2 in the episode.
+        - episode_cumulative_only_step_reward_p1 (float): Only step rewards for player 1 in the episode.
+        - episode_cumulative_only_step_reward_p2 (float): Only step rewards for player 2 in the episode.
+        - episode_cumulative_full_reward_without_coin_p1 (float): Total reward without coin for player 1 in the episode.
+        - episode_cumulative_full_reward_without_coin_p2 (float): Total reward without coin for player 2 in the episode.
         - trajectory_log (list): A log of states, actions, and rewards, if enabled.
     """
     env.reset()
@@ -149,6 +157,12 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
     
     episode_cumulative_negative_reward_p1 = 0
     episode_cumulative_negative_reward_p2 = 0
+    
+    episode_cumulative_only_step_reward_p1 = 0
+    episode_cumulative_only_step_reward_p2 = 0
+    
+    episode_cumulative_full_reward_without_coin_p1 = 0
+    episode_cumulative_full_reward_without_coin_p2 = 0
     
     trajectory_log = []
     
@@ -179,7 +193,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
         p0_loc_old, p1_loc_old = env.player_0_pos.copy(), env.player_1_pos.copy()
 
         # Execute actions in the environment.
-        s_new, full_rewards, positive_rewards, negative_rewards, done = env.step((a1, a2))
+        s_new, full_rewards, positive_rewards, negative_rewards, only_step_rewards, full_rewards_without_coin, done = env.step((a1, a2))
         
         # Allow learning agents to update their internal models/policies.
         if isinstance(p1, agents.LearningAgent):
@@ -199,6 +213,12 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
         
         episode_cumulative_negative_reward_p1 += negative_rewards[0]
         episode_cumulative_negative_reward_p2 += negative_rewards[1]
+        
+        episode_cumulative_only_step_reward_p1 += only_step_rewards[0]
+        episode_cumulative_only_step_reward_p2 += only_step_rewards[1]
+        
+        episode_cumulative_full_reward_without_coin_p1 += full_rewards_without_coin[0]
+        episode_cumulative_full_reward_without_coin_p2 += full_rewards_without_coin[1]
         
         # Log step details if enabled.
         if log_trajectory:
@@ -220,7 +240,10 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
 
     return (episode_cumulative_full_reward_p1, episode_cumulative_full_reward_p2,
             episode_cumulative_positive_reward_p1, episode_cumulative_positive_reward_p2,
-            episode_cumulative_negative_reward_p1, episode_cumulative_negative_reward_p2, trajectory_log)
+            episode_cumulative_negative_reward_p1, episode_cumulative_negative_reward_p2,
+            episode_cumulative_only_step_reward_p1, episode_cumulative_only_step_reward_p2,
+            episode_cumulative_full_reward_without_coin_p1, episode_cumulative_full_reward_without_coin_p2,
+            trajectory_log)
 
 def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     """
@@ -332,6 +355,12 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     negative_rewards_p1 = []
     negative_rewards_p2 = []
     
+    only_step_rewards_p1 = []
+    only_step_rewards_p2 = []
+    
+    full_rewards_without_coin_p1 = []
+    full_rewards_without_coin_p2 = []
+    
     
     trajectory_logs_all_experiments = []
 
@@ -429,12 +458,21 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
         run_negative_rewards_p1 = []
         run_negative_rewards_p2 = []
         
+        run_only_step_rewards_p1 = []
+        run_only_step_rewards_p2 = []
+        
+        run_full_rewards_without_coin_p1 = []
+        run_full_rewards_without_coin_p2 = []
+        
         # --- Episode Loop ---
         for episode_num in tqdm(range(n_episodes), desc=f"Epoch for experiment {experiment_num+1}", leave=False):
             
             (episode_cumulative_full_reward_p1, episode_cumulative_full_reward_p2,
             cumulative_positive_episode_reward_p1, cumulative_positive_episode_reward_p2,
-            cumulative_negative_episode_reward_p1, cumulative_negative_episode_reward_p2, trajectory) = run_single_episode(env, p1, p2, experiment_num, episode_num, log_trajectory=log_trajectory)
+            cumulative_negative_episode_reward_p1, cumulative_negative_episode_reward_p2,
+            cumulative_only_step_reward_p1, cumulative_only_step_reward_p2,
+            cumulative_full_reward_without_coin_p1, cumulative_full_reward_without_coin_p2,
+            trajectory) = run_single_episode(env, p1, p2, experiment_num, episode_num, log_trajectory=log_trajectory)
             
             # Append the trajectory log for this epoch to experiment log 
             trajectory_log_single_experiment.append(trajectory)
@@ -447,7 +485,12 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
             
             run_negative_rewards_p1.append(cumulative_negative_episode_reward_p1)
             run_negative_rewards_p2.append(cumulative_negative_episode_reward_p2)
-        
+            
+            run_only_step_rewards_p1.append(cumulative_only_step_reward_p1)
+            run_only_step_rewards_p2.append(cumulative_only_step_reward_p2)
+            
+            run_full_rewards_without_coin_p1.append(cumulative_full_reward_without_coin_p1)
+            run_full_rewards_without_coin_p2.append(cumulative_full_reward_without_coin_p2)
             
             #Update epsilon for agent and possible lower k-level models
             
@@ -487,6 +530,12 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     
         negative_rewards_p1.append(run_negative_rewards_p1)
         negative_rewards_p2.append(run_negative_rewards_p2)
+        
+        only_step_rewards_p1.append(run_only_step_rewards_p1)
+        only_step_rewards_p2.append(run_only_step_rewards_p2)
+        
+        full_rewards_without_coin_p1.append(run_full_rewards_without_coin_p1)
+        full_rewards_without_coin_p2.append(run_full_rewards_without_coin_p2)
 
     # --- Plotting and Saving results ---
     
@@ -496,7 +545,8 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative full rewards (positive + negative) per episode'
     
     plot_reward_per_episode_series(full_rewards_p1, full_rewards_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'], 
+         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         reward_time_series_range=config['plotting_settings']['reward_time_series_range'], 
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -506,7 +556,8 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative positive rewards per episode'
     
     plot_reward_per_episode_series(positive_rewards_p1, positive_rewards_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'], 
+         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -516,7 +567,30 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative negative rewards per episode'
     
     plot_reward_per_episode_series(negative_rewards_p1, negative_rewards_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'], 
+         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
+         dir=plot_path)
+    logging.info("Plot saved to %s.png", plot_path)
+    
+    # Plotting cumulative only step rewards 
+    plot_name = experiment_name + '_only_step_rewards'
+    plot_path = os.path.join(results_path, plot_name)
+    plot_title = 'Cumulative only step rewards per episode'
+    
+    plot_reward_per_episode_series(only_step_rewards_p1, only_step_rewards_p2, plot_title,
+         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
+         dir=plot_path)
+    logging.info("Plot saved to %s.png", plot_path)
+    
+    # Plotting cumulative full rewards without coin 
+    plot_name = experiment_name + '_full_rewards_without_coin'
+    plot_path = os.path.join(results_path, plot_name)
+    plot_title = 'Cumulative full rewards without coin per episode'
+    
+    plot_reward_per_episode_series(full_rewards_without_coin_p1, full_rewards_without_coin_p2, plot_title,
+         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -554,6 +628,24 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     p2_negative_rewards_path = os.path.join(results_path, 'negative_rewards_per_episode_p2.npy')
     np.save(p2_negative_rewards_path, np.array(negative_rewards_p2))
     logging.info("Negative rewards for player 2 saved to %s.", p2_negative_rewards_path)
+    
+    # Saving only step rewards
+    p1_only_step_rewards_path = os.path.join(results_path, 'only_step_rewards_per_episode_p1.npy')
+    np.save(p1_only_step_rewards_path, np.array(only_step_rewards_p1))
+    logging.info("Only step rewards for player 1 saved to %s.", p1_only_step_rewards_path)
+    
+    p2_only_step_rewards_path = os.path.join(results_path, 'only_step_rewards_per_episode_p2.npy')
+    np.save(p2_only_step_rewards_path, np.array(only_step_rewards_p2))
+    logging.info("Only step rewards for player 2 saved to %s.", p2_only_step_rewards_path)
+    
+    # Saving full rewards without coins
+    p1_full_rewards_without_coin_path = os.path.join(results_path, 'full_rewards_without_coin_per_episode_p1.npy')
+    np.save(p1_full_rewards_without_coin_path, np.array(full_rewards_without_coin_p1))
+    logging.info("Full rewards for player 1 saved to %s.", p1_full_rewards_without_coin_path)
+    
+    p2_full_rewards_without_coin_path = os.path.join(results_path, 'full_rewards_without_coin_per_episode_p2.npy')
+    np.save(p2_full_rewards_without_coin_path, np.array(full_rewards_without_coin_p2))
+    logging.info("Full rewards for player 2 saved to %s.", p2_full_rewards_without_coin_path)
     
     # Save the configuration file used for this run for full reproducibility.
     shutil.copy(config_file_path, results_path)

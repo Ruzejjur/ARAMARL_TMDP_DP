@@ -162,6 +162,8 @@ agent_settings:
 # Configures the appearance of the final reward plot.
 # ---------------------------------------------------------------------------
 plotting_settings:
+  # Range of values to plot in the reward time series.
+  reward_time_series_range: [9000,10000]
   # The size of the window for the moving average applied to the reward curves.
   # This helps to smooth out the noise and see the underlying learning trend.
   moving_average_window: 100
