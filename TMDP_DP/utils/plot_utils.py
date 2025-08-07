@@ -25,7 +25,7 @@ def moving_average(array, moving_average_window_size=3):
     # Divide by window size to obtain the moving average
     return ret[moving_average_window_size - 1:] / moving_average_window_size
 
-def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window_size, reward_time_series_range, dir=None):
+def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window_size, time_series_range, dir=None):
     """
     Plot smoothed reward trajectories for two agents over multiple experiments.
 
@@ -34,9 +34,8 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
         r1ss (list of arrays): Rewards for Agent B across experiments.
         plot_title (str): Title of the plot.
         moving_average_window_size(int): Size of right-aligned moving average window.
-        reward_time_series_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
+        time_series_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
         dir (str, optional): If provided, saves the plot to 'dir.png'.
-        interactive(bool, optional): If True, displays the plot interactively.
 
     Returns:
         None
@@ -46,9 +45,9 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
     # Create figure and axis explicitly d
     fig, ax = plt.subplots()
 
-    N_EXP = len(r0ss)
+    number_of_experiment = len(r0ss)
 
-    for i in range(N_EXP):
+    for i in range(number_of_experiment):
         # Calculate the moving average for the full series
         p0_reward_series = moving_average(r0ss[i], moving_average_window_size)
         p1_reward_series = moving_average(r1ss[i], moving_average_window_size)
@@ -68,7 +67,7 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
     ax.set_ylabel('Cumulative reward per episode')
     ax.set_title(plot_title)
     
-    ax.set_xlim(reward_time_series_range)
+    ax.set_xlim(time_series_range)
 
     custom_lines = [Line2D([0], [0], color='b', label='DM'),
                     Line2D([0], [0], color='r', label='Adversary')]
@@ -87,9 +86,91 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
                 "optimize": True,
                 "progressive": False
             }
-        )
-
+        )    
         
+def plot_result_ration(result_series, plot_title, result_type_to_plot, time_series_range, dir=None):
+    """
+    Plot result ration trajectories for an agent over multiple experiments.
+
+    Parameters:
+        result_series (list of arrays): A list where each element is a 1D numpy array
+                                        of game results for one experiment run.
+        plot_title (str): Title of the plot.
+        result_type_to_plot (str): One of 'win', 'loss', 'draw', or 'timeout'.
+        time_series_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
+        dir (str, optional): If provided, saves the plot to 'dir.png'.
+
+    Returns:
+        None
+    """
+    # Apply 'ggplot' style
+    plt.style.use('ggplot')
+    fig, ax = plt.subplots()
+
+    # Map the result type string to the integer code used in the data
+    result_code_map = {
+        "win": 1,
+        "loss": -1,
+        "draw": 0,
+        "timeout": -2
+    }
+    
+    if result_type_to_plot not in result_code_map:
+        raise ValueError("Invalid result type. Use 'win', 'loss', 'draw', or 'timeout'.")
+    
+    result_code = result_code_map[result_type_to_plot]
+
+    num_experiments = len(result_series)
+    num_episodes = len(result_series[0])
+
+    # Create an array of episode numbers [1, 2, ..., N] for the ratio calculation
+    episode_indices = np.arange(1, num_episodes + 1)
+    
+    # Store the calculated ratios for each experiment to compute the mean later
+    all_ratios = []
+
+    for i in range(num_experiments):
+        # Create a binary array: 1 if the result matches the type, 0 otherwise
+        binary_results = (np.array(result_series[i]) == result_code).astype(int)
+        
+        # Calculate the cumulative sum of the specific result
+        cumulative_results = np.cumsum(binary_results)
+        
+        # Calculate the ratio of that result type over the episodes
+        result_ratio = cumulative_results / episode_indices
+        all_ratios.append(result_ratio)
+        
+        # Plot the ratio for the individual run with high transparency
+        ax.plot(episode_indices, result_ratio, 'b', alpha=0.05)
+
+    # Calculate the mean ratio across all experiments
+    mean_ratio_series = np.mean(all_ratios, axis=0)
+    
+    # Plot the averaged line with lower transparency
+    ax.plot(episode_indices, mean_ratio_series, 'b', alpha=0.5)
+
+    ax.set_xlabel('Episode')
+    ax.set_ylabel(f'{result_type_to_plot.capitalize()} Ratio')
+    ax.set_title(plot_title)
+    
+    ax.set_xlim(time_series_range)
+
+    # Simplified legend for a single agent's metric
+    custom_lines = [Line2D([0], [0], color='b', label=f'DM {result_type_to_plot} ratio')]
+    ax.legend(handles=custom_lines)
+
+    if dir is not None:
+        fig.savefig(
+            f"{dir}.jpg",
+            format='jpeg',
+            dpi=1200,
+            bbox_inches='tight',
+            pil_kwargs={
+                "quality": 90,
+                "optimize": True,
+                "progressive": False
+            }
+        )
         
 def animate_trajectory_from_log(trajectory_log, grid_size=4, fps=4, dpi=100):
     """

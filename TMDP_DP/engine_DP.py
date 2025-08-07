@@ -345,13 +345,18 @@ class CoinGame():
         # Set rewards to initial value
         full_reward_0, full_reward_1 = self.step_penalty, self.step_penalty
         
+        full_reward_without_coin_0, full_reward_without_coin_1 = 0, 0
+        
+        full_reward_without_step_0, full_reward_without_step_1 = 0, 0
+        
         positive_reward_0, positive_reward_1 = 0, 0
         
         negative_reward_0, negative_reward_1 = self.step_penalty, self.step_penalty
         
         only_step_reward_0, only_step_reward_1 = self.step_penalty, self.step_penalty
         
-        full_reward_without_coin_0, full_reward_without_coin_1 = 0, 0
+        # Initial value for result
+        result = None
         
         # Store original positions for push logic
         original_pos_0 = self.player_0_pos.copy()
@@ -373,19 +378,23 @@ class CoinGame():
                 
                 full_reward_0 += self.both_push_penalty_delta
                 full_reward_without_coin_0 += self.both_push_penalty_delta
+                full_reward_without_step_0 += self.both_push_penalty_delta
                 negative_reward_0 += self.both_push_penalty_delta
                 
                 full_reward_1 += self.both_push_penalty_delta
                 full_reward_without_coin_1 += self.both_push_penalty_delta
+                full_reward_without_step_1 += self.both_push_penalty_delta
                 negative_reward_1 += self.both_push_penalty_delta
             else: 
                 
                 full_reward_0 += self.push_but_not_adjacent_penalty_delta
                 full_reward_without_coin_0 += self.push_but_not_adjacent_penalty_delta
+                full_reward_without_step_0 += self.push_but_not_adjacent_penalty_delta
                 negative_reward_0 += self.both_push_penalty_delta
                 
                 full_reward_1 += self.push_but_not_adjacent_penalty_delta
                 full_reward_without_coin_1 += self.push_but_not_adjacent_penalty_delta
+                full_reward_without_step_1 += self.push_but_not_adjacent_penalty_delta
                 negative_reward_1 += self.both_push_penalty_delta
                 
         elif actual_push_0:  # Player 0 pushes
@@ -395,10 +404,12 @@ class CoinGame():
                 
                 full_reward_0 += self.push_reward_delta
                 full_reward_without_coin_0 += self.push_reward_delta
+                full_reward_without_step_0 += self.push_reward_delta
                 positive_reward_0 += self.push_reward_delta
                 
                 full_reward_1 += self.push_penalty_delta
                 full_reward_without_coin_1 += self.push_penalty_delta
+                full_reward_without_step_1 += self.push_penalty_delta
                 negative_reward_1 += self.push_penalty_delta
                 
                 pushed_1_this_step = True
@@ -406,6 +417,7 @@ class CoinGame():
                 
                 full_reward_0 += self.push_but_not_adjacent_penalty_delta
                 full_reward_without_coin_0 += self.push_but_not_adjacent_penalty_delta
+                full_reward_without_step_0 += self.push_but_not_adjacent_penalty_delta
                 negative_reward_0 += self.push_but_not_adjacent_penalty_delta
                 
         elif actual_push_1:  # Player 1 pushes
@@ -415,16 +427,19 @@ class CoinGame():
                 
                 full_reward_1 += self.push_reward_delta
                 full_reward_without_coin_1 += self.push_reward_delta
+                full_reward_without_step_1 += self.push_reward_delta
                 positive_reward_1 += self.push_reward_delta
                 
                 full_reward_0 += self.push_penalty_delta
                 full_reward_without_coin_0 += self.push_penalty_delta
+                full_reward_without_step_0 += self.push_penalty_delta
                 negative_reward_0 += self.push_penalty_delta
                 
                 pushed_0_this_step = True
             else:
                 full_reward_1 += self.push_but_not_adjacent_penalty_delta
                 full_reward_without_coin_1 += self.push_but_not_adjacent_penalty_delta
+                full_reward_without_step_1 += self.push_but_not_adjacent_penalty_delta
                 negative_reward_1 += self.push_but_not_adjacent_penalty_delta
         # --- Apply Movement ---
         
@@ -439,6 +454,7 @@ class CoinGame():
                 
                 full_reward_0 += self.out_of_bounds_penalty_delta
                 full_reward_without_coin_0 += self.out_of_bounds_penalty_delta
+                full_reward_without_step_0 += self.out_of_bounds_penalty_delta
                 negative_reward_0 += self.out_of_bounds_penalty_delta
                 
             new_pos_0 = np.clip(candidate_pos, 0, self.grid_size - 1)
@@ -451,6 +467,7 @@ class CoinGame():
                 
                 full_reward_1 += self.out_of_bounds_penalty_delta
                 full_reward_without_coin_1 += self.out_of_bounds_penalty_delta
+                full_reward_without_step_1 += self.out_of_bounds_penalty_delta
                 negative_reward_1 += self.out_of_bounds_penalty_delta
                 
             new_pos_1 = np.clip(candidate_pos, 0, self.grid_size - 1)
@@ -463,10 +480,12 @@ class CoinGame():
             
             full_reward_0 += self.collision_penalty_delta
             full_reward_without_coin_0 += self.collision_penalty_delta
+            full_reward_without_step_0 += self.collision_penalty_delta
             negative_reward_0 += self.collision_penalty_delta
             
             full_reward_1 += self.collision_penalty_delta
             full_reward_without_coin_1 += self.collision_penalty_delta
+            full_reward_without_step_1 += self.collision_penalty_delta
             negative_reward_1 += self.collision_penalty_delta
         
         # --- Coin collection logic ---
@@ -490,10 +509,12 @@ class CoinGame():
          negative_reward_delta_0, negative_reward_delta_1) = self._resolve_coin_collection(1)
         
         full_reward_0 += full_reward_delta_0
+        full_reward_without_step_0 += full_reward_delta_0
         negative_reward_0 += negative_reward_delta_0
         positive_reward_0 += positive_reward_delta_0
         
         full_reward_1 += full_reward_delta_1
+        full_reward_without_step_1 += full_reward_delta_1
         negative_reward_1 += negative_reward_delta_1
         positive_reward_1 += positive_reward_delta_1
 
@@ -507,14 +528,23 @@ class CoinGame():
         is_draw = (not self.coin0_available and not self.coin1_available) and not p0_wins and not p1_wins
 
         if p0_wins:
-            full_reward_0, full_reward_1, self.done = self.win_reward, self.loss_penalty, True
-            positive_reward_0, negative_reward_1, self.done = self.win_reward, self.loss_penalty, True
+            self.done = True
+            result = 1
+            full_reward_0, full_reward_1 = self.win_reward, self.loss_penalty
+            full_reward_without_step_0, full_reward_without_step_1 = self.win_reward, self.loss_penalty
+            positive_reward_0, negative_reward_1 = self.win_reward, self.loss_penalty
         elif p1_wins:
-            full_reward_0, full_reward_1, self.done = self.loss_penalty, self.win_reward, True
-            positive_reward_1, negative_reward_0, self.done = self.win_reward, self.loss_penalty, True
+            self.done = True
+            result = -1
+            full_reward_0, full_reward_1 = self.loss_penalty, self.win_reward
+            full_reward_without_step_0, full_reward_without_step_1 = self.loss_penalty, self.win_reward
+            positive_reward_1, negative_reward_0 = self.win_reward, self.loss_penalty
         elif is_draw:
-            full_reward_0, full_reward_1, self.done = self.draw_penalty, self.draw_penalty, True
-            negative_reward_0, negative_reward_1, self.done = self.draw_penalty, self.draw_penalty, True
+            self.done = True
+            result = 0
+            full_reward_0, full_reward_1 = self.draw_penalty, self.draw_penalty
+            full_reward_without_step_0, full_reward_without_step_1 = self.draw_penalty, self.draw_penalty
+            negative_reward_0, negative_reward_1 = self.draw_penalty, self.draw_penalty
         
         # Overwrite step reward to 0
         if p0_wins or p1_wins or is_draw:
@@ -523,33 +553,40 @@ class CoinGame():
         # Check for timeout
         if not self.done and self.step_count >= self.max_steps:
             self.done = True
+            result = -2
             p0_coins = int(self.player_0_collected_coin0) + int(self.player_0_collected_coin1)
             p1_coins = int(self.player_1_collected_coin0) + int(self.player_1_collected_coin1)
             if p0_coins > p1_coins:
                 full_reward_0 += self.timeout_lead_bonus_delta
                 full_reward_without_coin_0 += self.timeout_lead_bonus_delta
+                full_reward_without_step_0 += self.timeout_lead_bonus_delta
                 positive_reward_0 += self.timeout_lead_bonus_delta
                 
                 full_reward_1 += self.timeout_trail_penalty_delta
                 full_reward_without_coin_1 += self.timeout_trail_penalty_delta
+                full_reward_without_step_1 += self.timeout_trail_penalty_delta
                 negative_reward_1 += self.timeout_trail_penalty_delta
                 
             elif p1_coins > p0_coins:
                 full_reward_1 += self.timeout_lead_bonus_delta
                 full_reward_without_coin_1 += self.timeout_lead_bonus_delta
+                full_reward_without_step_1 += self.timeout_lead_bonus_delta
                 positive_reward_1 += self.timeout_lead_bonus_delta
                 
                 full_reward_0 += self.timeout_trail_penalty_delta
                 full_reward_without_coin_0 += self.timeout_trail_penalty_delta
+                full_reward_without_step_0 += self.timeout_trail_penalty_delta
                 negative_reward_0 += self.timeout_trail_penalty_delta
                 
             else:
                 full_reward_0 += self.timeout_penalty_delta
                 full_reward_without_coin_0 += self.timeout_penalty_delta
+                full_reward_without_step_0 += self.timeout_penalty_delta
                 negative_reward_0 += self.timeout_penalty_delta
                 
                 full_reward_1 += self.timeout_penalty_delta
                 full_reward_without_coin_1 += self.timeout_penalty_delta
+                full_reward_without_step_1 += self.timeout_penalty_delta
                 negative_reward_1 += self.timeout_penalty_delta
                 
         return (self.get_state(), np.array([full_reward_0, full_reward_1]),
@@ -557,4 +594,6 @@ class CoinGame():
                                   np.array([negative_reward_0, negative_reward_1]),
                                   np.array([only_step_reward_0, only_step_reward_1]),
                                   np.array([full_reward_without_coin_0, full_reward_without_coin_1]),
+                                  np.array([full_reward_without_step_0, full_reward_without_step_1]),
+                                  result,
                                   self.done)

@@ -11,7 +11,7 @@ experiment_settings:
 environment_settings:
   class: "CoinGame"
   params:
-    grid_size: 3
+    grid_size: 9
     max_steps: 20000
     push_distance: 2
     rewards:
@@ -84,4 +84,5 @@ agent_settings:
 
 plotting_settings:
   reward_time_series_range: [9000,10000]
+  game_result_ratio_range: [9000,10000]
   moving_average_window: 1000

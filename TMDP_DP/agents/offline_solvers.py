@@ -165,7 +165,7 @@ class MDP_DP_Agent_PerfectModel(LearningAgent):
                         action_pair = (a_opp_exec, a_self_exec)
 
                     # Simulate one step with the specified executed action pair
-                    s_prime, rewards_vec, _, _, _, _, _= self.env_snapshot.step(action_pair)
+                    s_prime, rewards_vec, _, _, _, _, _, _, _ = self.env_snapshot.step(action_pair)
                     
                     # Store the resulting next state and the reward for this agent
                     s_prime_lookup[s, a_self_exec, a_opp_exec] = s_prime
