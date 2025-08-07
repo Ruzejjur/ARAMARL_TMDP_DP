@@ -4,7 +4,7 @@ comment: Small testrun to test if "from tqdm.auto import tqdm" can automaticaly 
 experiment_settings:
   name: "LevelK_MDP_DP_Agent_Stationary_vs_LevelK_TMDP_DP_Agent_Stationary"
   num_runs: 1     # How many times to repeat the experiment with different seeds
-  num_episodes: 100 # Number of episodes per run
+  num_episodes: 10000 # Number of episodes per run
   run_seed: 42 # Intial seed for runs
   results_dir: "results/" # Directory to save plots and data
 

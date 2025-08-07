@@ -5,29 +5,27 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.animation as animation
 
-
-
-def moving_average(a, n=3):
+def moving_average(array, moving_average_window_size=3):
     """
-    Compute the simple moving average of a 1D array.
+    Compute the right-aligned moving average of a 1D array.
 
     Parameters:
-        a (array-like): Input array containing numerical data.
-        n (int, optional): Window size for the moving average. Defaults to 3.
+        array (array-like): Input array containing numerical data.
+        moving_average_window_size (int, optional): Window size for the moving average. Defaults to 3.
 
     Returns:
-        ndarray: Array of moving averages with length len(a) - n + 1.
+        ndarray: Array of moving averages with length len(array) - moving_average_window_size + 1.
     """
     # Compute cumulative sum of the input array as float
-    ret = np.cumsum(a, dtype=float)
+    ret = np.cumsum(array, dtype=float)
     
-    # Subtract the cumulative sum shifted by 'n' to get the sum over each window
-    ret[n:] = ret[n:] - ret[:-n]
+    # Subtract the cumulative sum shifted by 'moving_average_window_size' to get the sum over each window
+    ret[moving_average_window_size:] = ret[moving_average_window_size:] - ret[:-moving_average_window_size]
     
     # Divide by window size to obtain the moving average
-    return ret[n - 1:] / n
+    return ret[moving_average_window_size - 1:] / moving_average_window_size
 
-def plot(r0ss, r1ss, moving_average_window_size=1000, dir=None):
+def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window_size=1000, dir=None):
     """
     Plot smoothed reward trajectories for two agents over multiple experiments.
 
@@ -53,8 +51,9 @@ def plot(r0ss, r1ss, moving_average_window_size=1000, dir=None):
     ax.plot(moving_average(np.mean(r0ss, axis=0), moving_average_window_size), 'b', alpha=0.5)
     ax.plot(moving_average(np.mean(r1ss, axis=0), moving_average_window_size), 'r', alpha=0.5)
 
-    ax.set_xlabel('t')
-    ax.set_ylabel('R')
+    ax.set_xlabel('episode')
+    ax.set_ylabel('Cumulative reward per episode')
+    ax.set_title(plot_title)
 
     custom_lines = [Line2D([0], [0], color='b', label='DM'),
                     Line2D([0], [0], color='r', label='Adversary')]
