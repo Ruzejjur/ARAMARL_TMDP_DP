@@ -399,8 +399,6 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
             current_seed = seed + experiment_num
             np.random.seed(current_seed)
             
-            # --- THIS IS THE IMPROVED LOGGING CALL ---
-            # It logs at the INFO level, which can be easily filtered.
             logging.info(
                 "Running experiment %d/%d with seed: %d",
                 experiment_num + 1,
