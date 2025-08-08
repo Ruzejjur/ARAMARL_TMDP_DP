@@ -81,10 +81,15 @@ class _BaseLevelK_TMDP_DP_Agent(LearningAgent):
         self.env_snapshot.player_1_execution_prob = 1.0
         
         # ---Action Setup ---
-        self.self_action_details = self.env_snapshot.combined_actions
-        self.opponent_action_details = self.env_snapshot.combined_actions
-        self.num_self_actions = len(env.combined_actions)
-        self.num_opponent_actions = len(env.combined_actions)
+        if self.env_snapshot.enable_push:
+            self.self_action_details = self.env_snapshot.combined_actions
+            self.opponent_action_details = self.env_snapshot.combined_actions
+        else: 
+            self.self_action_details = self.env_snapshot.combined_actions[:4,:]
+            self.opponent_action_details = self.env_snapshot.combined_actions[:4, :]
+            
+        self.num_self_actions = len(action_space)
+        self.num_opponent_actions = len(action_space)
         self.self_available_move_actions_num = len(env.available_move_actions)
         self.opponent_available_move_actions_num = len(env.available_move_actions)
 

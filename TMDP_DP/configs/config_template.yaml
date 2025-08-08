@@ -38,6 +38,10 @@ environment_settings:
     # The maximum number of steps allowed in a single episode before it times out.
     max_steps: 20000
 
+    # If set to `false`, the "push" action is disabled for the entire experiment.
+    # Agents will only have access to move actions, and all push-related rewards/penalties will be ignored.
+    enable_push: True
+
     # The number of grid cells an opponent is moved when successfully pushed.
     push_distance: 2
 
@@ -165,10 +169,12 @@ plotting_settings:
   # The size of the window for the moving average applied to the reward curves.
   # This helps to smooth out the noise and see the underlying learning trend.
   moving_average_window: 100
-  # Range of values to plot in the reward time series.
+  
+  # Sets the [xmin, xmax] range for the x-axis on the reward plots.
   reward_time_series_x_axis_plot_range: [9000,10000]
   
-  # Range of episodes for calculation of running win, loss and draw ratios.
+  # Defines the episode slice [start, end] to analyze for win/loss/draw ratios.
   episode_range_to_eval: [9899, 9999]
-  # Range of values to plot in the win, loss and draw ratio time series.
+  
+  # Sets the [xmin, xmax] range for the x-axis on the game result ratio plots.
   game_result_ratio_x_axis_plot_range: [9899, 9999]

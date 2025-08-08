@@ -46,7 +46,7 @@ class CoinGame():
         combined_actions (np.ndarray): All possible combinations of (move, push) actions.
     """
 
-    def __init__(self, max_steps: int, grid_size: int, push_distance: int, rewards: dict):
+    def __init__(self, max_steps: int, grid_size: int, enable_push:bool, push_distance: int, rewards: dict):
         """
         Initializes the CoinGame environment.
 
@@ -58,6 +58,7 @@ class CoinGame():
         self.max_steps = max_steps
         self.grid_size = grid_size
         self.push_distance = push_distance
+        self.enable_push = enable_push
         
         
         # --- Assign rewards from config to instance variables ---
@@ -371,76 +372,81 @@ class CoinGame():
         actual_move_1, actual_push_1 = self._resolve_action(1, action_1)
     
         # --- Resolve Push Attempts ---
-        
-        pushed_0_this_step, pushed_1_this_step = False, False
-        if actual_push_0 and actual_push_1:  # Both push
-            if players_are_adjacent:
-                
-                full_reward_0 += self.both_push_penalty_delta
-                full_reward_without_coin_0 += self.both_push_penalty_delta
-                full_reward_without_step_0 += self.both_push_penalty_delta
-                negative_reward_0 += self.both_push_penalty_delta
-                
-                full_reward_1 += self.both_push_penalty_delta
-                full_reward_without_coin_1 += self.both_push_penalty_delta
-                full_reward_without_step_1 += self.both_push_penalty_delta
-                negative_reward_1 += self.both_push_penalty_delta
-            else: 
-                
-                full_reward_0 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_coin_0 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_step_0 += self.push_but_not_adjacent_penalty_delta
-                negative_reward_0 += self.both_push_penalty_delta
-                
-                full_reward_1 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_coin_1 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_step_1 += self.push_but_not_adjacent_penalty_delta
-                negative_reward_1 += self.both_push_penalty_delta
-                
-        elif actual_push_0:  # Player 0 pushes
-            if players_are_adjacent:
-                push_direction = original_pos_1 - original_pos_0
-                self.player_1_pos = np.clip(original_pos_1 + self.push_distance * push_direction, 0, self.grid_size - 1)
-                
-                full_reward_0 += self.push_reward_delta
-                full_reward_without_coin_0 += self.push_reward_delta
-                full_reward_without_step_0 += self.push_reward_delta
-                positive_reward_0 += self.push_reward_delta
-                
-                full_reward_1 += self.push_penalty_delta
-                full_reward_without_coin_1 += self.push_penalty_delta
-                full_reward_without_step_1 += self.push_penalty_delta
-                negative_reward_1 += self.push_penalty_delta
-                
-                pushed_1_this_step = True
-            else:
-                
-                full_reward_0 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_coin_0 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_step_0 += self.push_but_not_adjacent_penalty_delta
-                negative_reward_0 += self.push_but_not_adjacent_penalty_delta
-                
-        elif actual_push_1:  # Player 1 pushes
-            if players_are_adjacent:
-                push_direction = original_pos_0 - original_pos_1
-                self.player_0_pos = np.clip(original_pos_0 + self.push_distance * push_direction, 0, self.grid_size - 1)
-                
-                full_reward_1 += self.push_reward_delta
-                full_reward_without_coin_1 += self.push_reward_delta
-                full_reward_without_step_1 += self.push_reward_delta
-                positive_reward_1 += self.push_reward_delta
-                
-                full_reward_0 += self.push_penalty_delta
-                full_reward_without_coin_0 += self.push_penalty_delta
-                full_reward_without_step_0 += self.push_penalty_delta
-                negative_reward_0 += self.push_penalty_delta
-                
-                pushed_0_this_step = True
-            else:
-                full_reward_1 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_coin_1 += self.push_but_not_adjacent_penalty_delta
-                full_reward_without_step_1 += self.push_but_not_adjacent_penalty_delta
-                negative_reward_1 += self.push_but_not_adjacent_penalty_delta
+
+        if self.enable_push:
+            
+            pushed_0_this_step, pushed_1_this_step = False, False
+            if actual_push_0 and actual_push_1:  # Both push
+                if players_are_adjacent:
+                    
+                    full_reward_0 += self.both_push_penalty_delta
+                    full_reward_without_coin_0 += self.both_push_penalty_delta
+                    full_reward_without_step_0 += self.both_push_penalty_delta
+                    negative_reward_0 += self.both_push_penalty_delta
+                    
+                    full_reward_1 += self.both_push_penalty_delta
+                    full_reward_without_coin_1 += self.both_push_penalty_delta
+                    full_reward_without_step_1 += self.both_push_penalty_delta
+                    negative_reward_1 += self.both_push_penalty_delta
+                else: 
+                    
+                    full_reward_0 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_coin_0 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_step_0 += self.push_but_not_adjacent_penalty_delta
+                    negative_reward_0 += self.both_push_penalty_delta
+                    
+                    full_reward_1 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_coin_1 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_step_1 += self.push_but_not_adjacent_penalty_delta
+                    negative_reward_1 += self.both_push_penalty_delta
+                    
+            elif actual_push_0:  # Player 0 pushes
+                if players_are_adjacent:
+                    push_direction = original_pos_1 - original_pos_0
+                    self.player_1_pos = np.clip(original_pos_1 + self.push_distance * push_direction, 0, self.grid_size - 1)
+                    
+                    full_reward_0 += self.push_reward_delta
+                    full_reward_without_coin_0 += self.push_reward_delta
+                    full_reward_without_step_0 += self.push_reward_delta
+                    positive_reward_0 += self.push_reward_delta
+                    
+                    full_reward_1 += self.push_penalty_delta
+                    full_reward_without_coin_1 += self.push_penalty_delta
+                    full_reward_without_step_1 += self.push_penalty_delta
+                    negative_reward_1 += self.push_penalty_delta
+                    
+                    pushed_1_this_step = True
+                else:
+                    
+                    full_reward_0 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_coin_0 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_step_0 += self.push_but_not_adjacent_penalty_delta
+                    negative_reward_0 += self.push_but_not_adjacent_penalty_delta
+                    
+            elif actual_push_1:  # Player 1 pushes
+                if players_are_adjacent:
+                    push_direction = original_pos_0 - original_pos_1
+                    self.player_0_pos = np.clip(original_pos_0 + self.push_distance * push_direction, 0, self.grid_size - 1)
+                    
+                    full_reward_1 += self.push_reward_delta
+                    full_reward_without_coin_1 += self.push_reward_delta
+                    full_reward_without_step_1 += self.push_reward_delta
+                    positive_reward_1 += self.push_reward_delta
+                    
+                    full_reward_0 += self.push_penalty_delta
+                    full_reward_without_coin_0 += self.push_penalty_delta
+                    full_reward_without_step_0 += self.push_penalty_delta
+                    negative_reward_0 += self.push_penalty_delta
+                    
+                    pushed_0_this_step = True
+                else:
+                    full_reward_1 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_coin_1 += self.push_but_not_adjacent_penalty_delta
+                    full_reward_without_step_1 += self.push_but_not_adjacent_penalty_delta
+                    negative_reward_1 += self.push_but_not_adjacent_penalty_delta
+        else: 
+            pushed_0_this_step, pushed_1_this_step = False, False      
+            
         # --- Apply Movement ---
         
         new_pos_0 = self.player_0_pos.copy()

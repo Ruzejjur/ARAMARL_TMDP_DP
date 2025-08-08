@@ -417,10 +417,19 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
         trajectory_log_single_experiment = []
         
         # --- Agent Initialization ---
+            
+        if env_settings['params']['enable_push']:
+            action_space_to_use = np.arange(len(env.combined_actions))
+            logging.info("Experiment running with MOVE and PUSH actions.")
+        else:
+            # The first 4 actions in combined_actions are the move-only ones.
+            action_space_to_use = np.arange(4) 
+            logging.info("Experiment running with MOVE-ONLY actions (PUSH is disabled).")
+        
         common_agent_params = {
             'n_states': env.n_states,
-            'action_space': np.array(range(len(env.combined_actions))),
-            'opponent_action_space': np.array(range(len(env.combined_actions))),
+            'action_space': action_space_to_use,
+            'opponent_action_space': action_space_to_use,
             'grid_size': env_settings['params']['grid_size'],
             'env': env 
         }

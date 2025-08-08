@@ -77,10 +77,15 @@ class _BaseLevelK_MDP_DP_Agent(LearningAgent):
         
         # ---Action Setup ---
 
-        self.self_action_details = self.env_snapshot.combined_actions
-        self.opponent_action_details = self.env_snapshot.combined_actions
-        self.num_self_actions = len(env.combined_actions)
-        self.num_opponent_actions = len(env.combined_actions)
+        if self.env_snapshot.enable_push:
+            self.self_action_details = self.env_snapshot.combined_actions
+            self.opponent_action_details = self.env_snapshot.combined_actions
+        else: 
+            self.self_action_details = self.env_snapshot.combined_actions[:4,:]
+            self.opponent_action_details = self.env_snapshot.combined_actions[:4, :]
+            
+        self.num_self_actions = len(action_space)
+        self.num_opponent_actions = len(action_space)
         self.self_available_move_actions_num = len(env.available_move_actions)
         self.opponent_available_move_actions_num = len(env.available_move_actions)
 

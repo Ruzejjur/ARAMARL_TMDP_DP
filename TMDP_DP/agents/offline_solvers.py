@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from typing import Optional
 
 from .tmdp_dp import LevelK_TMDP_DP_Agent_Stationary
-from .heuristic import ManhattanAgent
+from .heuristic import ManhattanAgent, ManhattanAgent_Passive
 from .base import LearningAgent
 
 # --- Type Aliases for Readability ---
@@ -32,6 +32,12 @@ class MDP_DP_Agent_PerfectModel(LearningAgent):
     def __init__(self, action_space: np.ndarray, n_states: int, gamma: float, initial_V_value: float, player_id: int,
                  termination_criterion: float, value_iteration_max_num_of_iter: int, env, opponent: ManhattanAgent):
 
+        if not isinstance(opponent, ManhattanAgent):
+            raise TypeError(f"The provided opponent must be a ManhattanAgent class instance, but got {type(opponent).__name__} instead.")
+
+        if env.enable_push is False and not isinstance(opponent, ManhattanAgent_Passive):
+            raise TypeError(f"The provided opponent must be a ManhattanAgent_Passive class instance, but got {type(opponent).__name__} instead.")
+
         # --- Core Agent Parameters ---
         self.n_states = n_states
         self.gamma = gamma
@@ -49,12 +55,15 @@ class MDP_DP_Agent_PerfectModel(LearningAgent):
         self.env_snapshot.player_1_execution_prob = 1.0
         
         # ---Action Setup ---
-        # Determine action spaces and details based on player_id
-
-        self.self_action_details = self.env_snapshot.combined_actions
-        self.opponent_action_details = self.env_snapshot.combined_actions
-        self.num_self_actions = len(env.combined_actions)
-        self.num_opponent_actions = len(env.combined_actions)
+        if self.env_snapshot.enable_push:
+            self.self_action_details = self.env_snapshot.combined_actions
+            self.opponent_action_details = self.env_snapshot.combined_actions
+        else: 
+            self.self_action_details = self.env_snapshot.combined_actions[:4,:]
+            self.opponent_action_details = self.env_snapshot.combined_actions[:4, :]
+            
+        self.num_self_actions = len(action_space)
+        self.num_opponent_actions = len(action_space)
         self.self_available_move_actions_num = len(env.available_move_actions)
         self.opponent_available_move_actions_num = len(env.available_move_actions)
         
@@ -469,6 +478,9 @@ class TMDP_DP_Agent_PerfectModel(LevelK_TMDP_DP_Agent_Stationary):
         
         if not isinstance(opponent, ManhattanAgent):
             raise TypeError(f"The provided opponent must be a ManhattanAgent class instance, but got {type(opponent).__name__} instead.")
+        
+        if env.enable_push is False and not isinstance(opponent, ManhattanAgent_Passive):
+            raise TypeError(f"The provided opponent must be a ManhattanAgent_Passive class instance, but got {type(opponent).__name__} instead.")
         
         super().__init__(k=1, action_space=action_space, opponent_action_space=opponent_action_space, lower_level_k_epsilon=0,
                          n_states=n_states, epsilon=0, gamma=gamma, initial_V_value=initial_V_value,
