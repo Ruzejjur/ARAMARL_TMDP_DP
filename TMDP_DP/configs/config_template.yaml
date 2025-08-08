@@ -162,10 +162,13 @@ agent_settings:
 # Configures the appearance of the final reward plot.
 # ---------------------------------------------------------------------------
 plotting_settings:
-  # Range of values to plot in the reward time series.
-  reward_time_series_range: [9000,10000]
-  # Range of values to plot in the win, loss and draw ratio time series.
-  game_result_ratio_range: [9000,10000]
   # The size of the window for the moving average applied to the reward curves.
   # This helps to smooth out the noise and see the underlying learning trend.
   moving_average_window: 100
+  # Range of values to plot in the reward time series.
+  reward_time_series_x_axis_plot_range: [9000,10000]
+  
+  # Range of episodes for calculation of running win, loss and draw ratios.
+  episode_range_to_eval: [9899, 9999]
+  # Range of values to plot in the win, loss and draw ratio time series.
+  game_result_ratio_x_axis_plot_range: [9899, 9999]

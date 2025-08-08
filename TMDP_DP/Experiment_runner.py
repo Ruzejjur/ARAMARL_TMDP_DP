@@ -133,7 +133,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
 
     Returns:
         A tuple containing:
-        - cumulative_full_episode_reward_p1 (float): Total reward for player 1 in the episode.
+        - episode_cumulative_full_reward_p1 (float): Total reward for player 1 in the episode.
         - episode_cumulative_full_reward_p2 (float): Total reward for player 2 in the episode.
         - episode_cumulative_positive_reward_p1 (float): Only positive rewards for player 1 in the episode.
         - episode_cumulative_positive_reward_p2 (float): Only positive rewards for player 2 in the episode.
@@ -149,7 +149,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
     obs = env.get_state()
     done = False
     
-    cumulative_full_episode_reward_p1 = 0
+    episode_cumulative_full_reward_p1 = 0
     episode_cumulative_full_reward_p2 = 0
 
     episode_cumulative_positive_reward_p1 = 0
@@ -169,8 +169,6 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
     
     trajectory_log = []
     
-    episode_result = []
-    
     # Initialising variable for resilt of the game 
     result_p1 = None
     
@@ -187,6 +185,8 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
             'p1_action': ["None", "None"],
             'p0_reward': None,
             'p1_reward': None,
+            'p0_cum_reward': None,
+            'p1_cum_reward': None,
             'experiment': experiment_num,
             'epoch': episode_num
         })
@@ -213,7 +213,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
         obs = s_new
         
         # Accumulate rewards.   
-        cumulative_full_episode_reward_p1 += full_rewards[0]
+        episode_cumulative_full_reward_p1 += full_rewards[0]
         episode_cumulative_full_reward_p2 += full_rewards[1]
         
         episode_cumulative_positive_reward_p1 += positive_rewards[0]
@@ -244,6 +244,8 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
                 'p1_action': env.combined_actions[a2],
                 'p0_reward': full_rewards[0],
                 'p1_reward': full_rewards[1],
+                'p0_cum_reward': episode_cumulative_full_reward_p1,
+                'p1_cum_reward': episode_cumulative_full_reward_p2,
                 'experiment': experiment_num,
                 'epoch': episode_num
             })
@@ -252,7 +254,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
         
     episode_result_p1 = result_p1
         
-    return (cumulative_full_episode_reward_p1, episode_cumulative_full_reward_p2,
+    return (episode_cumulative_full_reward_p1, episode_cumulative_full_reward_p2,
             episode_cumulative_positive_reward_p1, episode_cumulative_positive_reward_p2,
             episode_cumulative_negative_reward_p1, episode_cumulative_negative_reward_p2,
             episode_cumulative_only_step_reward_p1, episode_cumulative_only_step_reward_p2,
@@ -496,7 +498,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
         # --- Episode Loop ---
         for episode_num in tqdm(range(n_episodes), desc=f"Epoch for experiment {experiment_num+1}", leave=False):
             
-            (cumulative_full_episode_reward_p1, episode_cumulative_full_reward_p2,
+            (episode_cumulative_full_reward_p1, episode_cumulative_full_reward_p2,
             cumulative_positive_episode_reward_p1, cumulative_positive_episode_reward_p2,
             cumulative_negative_episode_reward_p1, cumulative_negative_episode_reward_p2,
             cumulative_only_step_reward_p1, cumulative_only_step_reward_p2,
@@ -506,7 +508,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
             trajectory) = run_single_episode(env, p1, p2, experiment_num, episode_num, log_trajectory=log_trajectory)
             
             # Append the comulative reward to array of cumulative results
-            run_full_rewards_p1.append(cumulative_full_episode_reward_p1)
+            run_full_rewards_p1.append(episode_cumulative_full_reward_p1)
             run_full_rewards_p2.append(episode_cumulative_full_reward_p2)
             
             run_positive_rewards_p1.append(cumulative_positive_episode_reward_p1)
@@ -589,7 +591,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     
     plot_reward_per_episode_series(full_rewards_p1, full_rewards_p2, plot_title,
          moving_average_window_size=config['plotting_settings']['moving_average_window'],
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'], 
+         episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'], 
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -600,7 +602,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     
     plot_reward_per_episode_series(positive_rewards_p1, positive_rewards_p2, plot_title,
          moving_average_window_size=config['plotting_settings']['moving_average_window'],
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
+         episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -611,7 +613,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     
     plot_reward_per_episode_series(negative_rewards_p1, negative_rewards_p2, plot_title,
          moving_average_window_size=config['plotting_settings']['moving_average_window'],
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
+         episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -622,7 +624,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     
     plot_reward_per_episode_series(only_step_rewards_p1, only_step_rewards_p2, plot_title,
          moving_average_window_size=config['plotting_settings']['moving_average_window'],
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
+         episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -633,7 +635,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     
     plot_reward_per_episode_series(full_rewards_without_coin_p1, full_rewards_without_coin_p2, plot_title,
          moving_average_window_size=config['plotting_settings']['moving_average_window'],
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
+         episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -644,7 +646,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     
     plot_reward_per_episode_series(full_rewards_without_step_p1, full_rewards_without_step_p2, plot_title,
          moving_average_window_size=config['plotting_settings']['moving_average_window'],
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
+         episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
@@ -653,9 +655,12 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_path = os.path.join(results_path, plot_name)
     plot_title = 'Win ratio for DM'
     
-    plot_result_ration(game_result_p1, plot_title, result_type_to_plot="win",
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
-         dir=plot_path)
+    plot_result_ration(result_series=game_result_p1,
+                       episode_range_to_eval=config['plotting_settings']['episode_range_to_eval'],
+                       plot_title=plot_title,
+                       result_type_to_plot="win",
+                       episode_series_x_axis_plot_range=config['plotting_settings']['game_result_ratio_x_axis_plot_range'],  
+                       dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting evolving loss ratio 
@@ -663,9 +668,12 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_path = os.path.join(results_path, plot_name)
     plot_title = 'Loss ratio for DM'
     
-    plot_result_ration(game_result_p1, plot_title, result_type_to_plot="loss",
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
-         dir=plot_path)
+    plot_result_ration(result_series=game_result_p1,
+                       episode_range_to_eval=config['plotting_settings']['episode_range_to_eval'],
+                       plot_title=plot_title,
+                       result_type_to_plot="loss",
+                       episode_series_x_axis_plot_range=config['plotting_settings']['game_result_ratio_x_axis_plot_range'],  
+                       dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting evolving draw ratio 
@@ -673,9 +681,12 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_path = os.path.join(results_path, plot_name)
     plot_title = 'Draw ratio for DM'
     
-    plot_result_ration(game_result_p1, plot_title, result_type_to_plot="draw",
-         reward_time_series_range=config['plotting_settings']['reward_time_series_range'],  
-         dir=plot_path)
+    plot_result_ration(result_series=game_result_p1,
+                       episode_range_to_eval=config['plotting_settings']['episode_range_to_eval'],
+                       plot_title=plot_title,
+                       result_type_to_plot="draw",
+                       episode_series_x_axis_plot_range=config['plotting_settings']['game_result_ratio_x_axis_plot_range'],  
+                       dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
     
     # Save trajectory logs if enabled.
