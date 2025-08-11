@@ -46,7 +46,7 @@ class CoinGame():
         combined_actions (np.ndarray): All possible combinations of (move, push) actions.
     """
 
-    def __init__(self, max_steps: int, grid_size: int, enable_push:bool, push_distance: int, rewards: dict):
+    def __init__(self, max_steps: int, grid_size: int, enable_push:bool, push_distance: int, rewards: dict, action_execution_probabilities: tuple|list):
         """
         Initializes the CoinGame environment.
 
@@ -102,8 +102,8 @@ class CoinGame():
         self.combined_actions = np.column_stack([grid_move.ravel(), grid_push.ravel()])
 
         # --- Stochasticity Parameters ---
-        self.player_0_execution_prob = 0.8
-        self.player_1_execution_prob = 0.8
+        self.player_0_execution_prob = action_execution_probabilities[0]
+        self.player_1_execution_prob = action_execution_probabilities[1]
         
         # --- Initial Positions ---
         self.player_0_initial_pos = np.array([self.grid_size // 2, 0])
