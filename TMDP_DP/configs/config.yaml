@@ -13,35 +13,35 @@ environment_settings:
   params:
     grid_size: 7
     max_steps: 20000
-    enable_push: False
+    enable_push: True
     push_distance: 2
-    action_execution_probabilities: [0.8, 0.8]
+    action_execution_probabilities: [0.6, 0.6]
     rewards:
       # --- General Penalties ---
-      step_penalty: -0.1                   # Penalty incurred by each agent on every step.
-      out_of_bounds_penalty_delta: 0          # Penalty for attempting to move off the grid.
-      collision_penalty_delta: 0              # Penalty for attempting to move to the same cell as the other player.
+      step_penalty: [-0.1, -0.1]                       # Penalty incurred by each agent on every step.
+      out_of_bounds_penalty_delta: [0.0, 0.0]          # Penalty for attempting to move off the grid.
+      collision_penalty_delta: [0.0, 0.0]              # Penalty for attempting to move to the same cell as the other player.
 
       # --- Push-related Rewards/Penalties ---
-      push_reward_delta: 0.4                     # Reward for successfully pushing an adjacent opponent.
-      push_penalty_delta: -0.2                   # Penalty for being pushed by an opponent.
-      push_but_not_adjacent_penalty_delta: -0.05 # Penalty for using the 'push' action when not next to the opponent.
-      both_push_penalty_delta: -0.05             # Penalty applied to both players if they push each other simultaneously.
+      push_reward_delta: [0.4, 0.4]                       # Reward for successfully pushing an adjacent opponent.
+      push_penalty_delta: [-0.2, -0.2]                    # Penalty for being pushed by an opponent.
+      push_but_not_adjacent_penalty_delta: [-0.05, -0.05] # Penalty for using the 'push' action when not next to the opponent.
+      both_push_penalty_delta: [-0.05, -0.05]             # Penalty applied to both players if they push each other simultaneously.
 
       # --- Coin-related Rewards/Penalties ---
-      coin_reward_delta: 0                     # Reward for collecting a coin.
-      coin_steal_penalty_delta: 0                # Penalty for the other player when one player collects a coin.
-      contested_coin_penalty_delta: 0            # Penalty applied to both players if they try to collect same coin at the same time.
+      coin_reward_delta: [0.0, 0.0]                       # Reward for collecting a coin.
+      coin_steal_penalty_delta: [0.0, 0.0]                # Penalty for the other player when one player collects a coin.
+      contested_coin_penalty_delta: [0.0, 0.0]            # Penalty applied to both players if they try to collect same coin at the same time.
 
       # --- Terminal (End of Game) Rewards/Penalties ---
-      win_reward: 10.0                     # Reward for winning the game (collecting both coins).
-      loss_penalty: -10.0                  # Penalty for losing the game.
-      draw_penalty: 0.0                      # Penalty for a draw (both coins collected, but neither player won).
+      win_reward: [10.0, 10.0]                      # Reward for winning the game (collecting both coins).
+      loss_penalty: [-10.0, -10.0]                  # Penalty for losing the game.
+      draw_penalty: [0.0, 0.0]                      # Penalty for a draw (both coins collected, but neither player won).
 
       # --- Timeout-related Rewards/Penalties (if max_steps is reached) ---
-      timeout_penalty_delta: -2.0                # Base penalty applied to both players if the game times out.
-      timeout_lead_bonus_delta: 1.0              # Additional bonus for the player with more coins at timeout.
-      timeout_trail_penalty_delta: -1.0          # Additional penalty for the player with fewer coins at timeout.
+      timeout_penalty_delta: [-2.0, -2.0]                # Base penalty applied to both players if the game times out.
+      timeout_lead_bonus_delta: [1.0, 1.0]               # Additional bonus for the player with more coins at timeout.
+      timeout_trail_penalty_delta: [-1.0, -1.0]          # Additional penalty for the player with fewer coins at timeout.
 
 
 agent_settings:
