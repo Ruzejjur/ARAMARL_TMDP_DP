@@ -3,11 +3,11 @@ import os
 import logging
 import sys
 
-# Directing log messages of level INFO and higher to the console.
+# --- Initial Logging Setup for the Parallel Runner Script Itself ---
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    stream=sys.stdout,  # Explicitly direct logs to standard output
+    format='%(asctime)s - [PARALLEL_RUNNER] - %(levelname)s - %(message)s',
+    stream=sys.stdout,
     force=True
 )
 

@@ -1,16 +1,17 @@
 import logging
 import sys
 
-# Directing log messages of level INFO and higher to the console.
+from experiment_runner import run_experiment
+
+# This configures the root logger for immediate console output.
+# The 'force=True' argument is crucial to ensure this configuration is applied,
+# even if other modules (like in a Jupyter environment) have already touched the logging system.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    stream=sys.stdout,  # Explicitly direct logs to standard output
+    stream=sys.stdout,
     force=True
 )
-
-from experiment_runner import run_experiment
-
 
 if __name__ == "__main__":
     # Use the config file specified from the command line, 

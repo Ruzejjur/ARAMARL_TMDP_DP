@@ -17,6 +17,7 @@ import logging
 import inspect
 from datetime import datetime
 import shutil
+import sys
 
 
 # Import your custom modules
@@ -53,6 +54,24 @@ def load_config(config_file_path: str) -> dict:
         return yaml.safe_load(f)
     
     logging.info("Configuration loaded successfully. Starting experiment...")
+    
+def add_file_handler_to_logger(results_path: str):
+    """Adds a file handler to the root logger to save logs to a specified directory."""
+    log_filename = os.path.join(results_path, 'experiment_log.log')
+    
+    # Get the root logger
+    logger = logging.getLogger()
+    
+    # Create a formatter (so the file logs match the console logs)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Create a file handler
+    file_handler = logging.FileHandler(log_filename)
+    file_handler.setFormatter(formatter)
+    
+    # Add the handler to the root logger
+    logger.addHandler(file_handler)
+    logging.info(f"Logging is now also being saved to: {log_filename}")
     
 def create_agent(agent_config: dict, common_params: dict) -> agents.BaseAgent:
     """
@@ -109,7 +128,7 @@ def create_agent(agent_config: dict, common_params: dict) -> agents.BaseAgent:
         raise TypeError(
             f"Error creating agent '{agent_class_name}'. "
             f"The configuration is missing the following required parameters: {list(missing_params)}. "
-            "Please add them to the 'params' section in your config.yaml for this agent."
+            "Please add them to the 'params' section in your config*.yaml for this agent."
         )
         
     # Filter the provided parameters to only include those expected by the constructor.
@@ -294,6 +313,10 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     run_dir_name = f"{experiment_name}_{timestamp}"
     results_path = os.path.join(exp_settings['results_dir'], run_dir_name)
     os.makedirs(results_path, exist_ok=True)
+    
+    # Setup logging
+    add_file_handler_to_logger(results_path)
+    
     logging.info("Results for this run will be saved in: %s", results_path)
     
     # Initialize the single environment instance.
