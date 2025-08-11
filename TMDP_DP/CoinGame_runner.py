@@ -18,7 +18,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         config_file_path = sys.argv[1]
     else:
-        config_file_path = 'configs/config.yaml'
+        raise ValueError("Config path was not provided.")
     
     # Set log_trajectory to True if you want to save animations later
     results_path = run_experiment(config_file_path, log_trajectory=True)

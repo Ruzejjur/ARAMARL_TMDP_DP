@@ -94,7 +94,7 @@ agent_settings:
     # Q-Learning Agents:      IndQLearningAgent, IndQLearningAgentSoftmax, LevelKQAgent, LevelKQAgentSoftmax
     # MDP DP Agents:          LevelK_MDP_DP_Agent_Stationary, LevelK_MDP_DP_Agent_NonStationary, LevelK_MDP_DP_Agent_Dynamic
     # TMDP DP Agents:         LevelK_TMDP_DP_Agent_Stationary, LevelK_TMDP_DP_Agent_NonStationary, LevelK_TMDP_DP_Agent_Dynamic
-    # Offline Solvers:        DPAgent_PerfectModel, TMDP_DPAgent_PerfectModel
+    # Offline Solvers:        MDP_DP_Agent_PerfectModel, TMDP_DP_Agent_PerfectModel
     class: "LevelKQAgent"
 
     # Agent-specific parameters that are passed to its constructor.

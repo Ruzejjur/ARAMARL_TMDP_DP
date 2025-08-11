@@ -597,7 +597,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative full rewards (positive + negative) per episode'
     
     plot_reward_per_episode_series(full_rewards_p1, full_rewards_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'], 
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
@@ -608,7 +608,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative positive rewards per episode'
     
     plot_reward_per_episode_series(positive_rewards_p1, positive_rewards_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
@@ -619,7 +619,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative negative rewards per episode'
     
     plot_reward_per_episode_series(negative_rewards_p1, negative_rewards_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
@@ -630,7 +630,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative only step rewards per episode'
     
     plot_reward_per_episode_series(only_step_rewards_p1, only_step_rewards_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
@@ -641,7 +641,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative full rewards without coin per episode'
     
     plot_reward_per_episode_series(full_rewards_without_coin_p1, full_rewards_without_coin_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
@@ -652,7 +652,7 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     plot_title = 'Cumulative full rewards without step per episode'
     
     plot_reward_per_episode_series(full_rewards_without_step_p1, full_rewards_without_step_p2, plot_title,
-         moving_average_window_size=config['plotting_settings']['moving_average_window'],
+         moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
          dir=plot_path)
     logging.info("Plot saved to %s.png", plot_path)
