@@ -55,7 +55,7 @@ class CoinGame():
             grid_size (int): The size of one dimension of the square grid (N).
             push_distance (int): The number of cells an opponent is moved when pushed.
         """
-        self.max_steps = max_steps
+        self.max_steps = float(max_steps)
         self.grid_size = grid_size
         self.push_distance = push_distance
         self.enable_push = enable_push

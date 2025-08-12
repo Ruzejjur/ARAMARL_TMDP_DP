@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.animation as animation
+import matplotlib.ticker as mticker
 import mplcursors
 
 def moving_average(array, moving_average_window_size=3):
@@ -75,6 +76,9 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
     ax.set_ylabel('Cumulative reward per episode')
     ax.set_title(plot_title)
     ax.set_xlim(episode_series_x_axis_plot_range)
+    
+    # Force the x-axis to use integer ticks
+    ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 
     custom_lines = [Line2D([0], [0], color='b', label='DM'),
                     Line2D([0], [0], color='r', label='Adversary')]
@@ -177,8 +181,10 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
     ax.set_xlabel('Episode')
     ax.set_ylabel(f'{result_type_to_plot.capitalize()} Ratio')
     ax.set_title(plot_title)
-    
     ax.set_xlim(episode_series_x_axis_plot_range)
+    
+    # Force the x-axis to use integer ticks
+    ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 
     # Simplified legend for a single agent's metric
     custom_lines = [Line2D([0], [0], color='b', label=f'DM {result_type_to_plot} ratio')]

@@ -118,21 +118,21 @@ agent_settings:
       # --- Parameters for Softmax Agents (IndQLearningAgentSoftmax, LevelKQAgentSoftmax) ---
       beta: 1.0                # The temperature parameter for the softmax policy. Higher values lead to more deterministic actions.
 
-      # --- Parameters for Offline Solvers (DPAgent_PerfectModel, TMDP_DPAgent_PerfectModel) ---
+      # --- Parameters for Offline Solvers (MDP_DP_Agent_PerfectModel, TMDP_DP_Agent_PerfectModel) ---
       # NOTE: The 'opponent' param is configured as player_2 and handled automatically by the runner.
       termination_criterion: 0.001        # Convergence threshold for value iteration.
       value_iteration_max_num_of_iter: 1000 # Max iterations for value iteration.
 
-    # Defines the epsilon decay schedule for the main agent (Player 1).
+    # Defines the epsilon decay schedule for the main agent.
     epsilon_decay_agent:
       type: "linear"           # Options: "linear", "no_decay"
-      end: 0.1                 # The final epsilon value.
+      end: 0.1                 # The final epsilon value for "linear" option.
 
     # Defines the epsilon decay for the k-1 cognitive hierarchy.
     # This is only used for k-level agents.
-    epsilon_decay_inernal_opponent_model:
+    epsilon_decay_internal_opponent_model:
       type: "linear"           # Options: "linear", "no_decay"
-      end: 0.1                 # The final epsilon value.
+      end: 0.1                 # The final epsilon value for "linear" option.
 
   player_2:
     class: "IndQLearningAgentSoftmax"
@@ -163,7 +163,7 @@ agent_settings:
       end: 0.1
 
     # Epsilon decay for the internal opponent model (not applicable to IQL agents).
-    epsilon_decay_inernal_opponent_model:
+    epsilon_decay_internal_opponent_model:
       type: "linear"
       end: 0.1
 
