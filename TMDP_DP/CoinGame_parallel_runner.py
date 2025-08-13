@@ -1,9 +1,33 @@
+
+"""
+Orchestrates running multiple experiments defined by .yaml files in parallel.
+
+This script acts as a master controller. It discovers experiment configuration
+files in a specified directory and then spawns multiple "worker" processes,
+each running the 'CoinGame_runner.py' script with a different configuration.
+
+It uses a thread pool to manage concurrency, captures the standard output and
+error for each individual run into log files, and provides a final summary of
+successful and failed jobs.
+
+Usage Examples:
+  # Run all configs in a directory using default CPU count
+  python CoinGame_parallel_runner.py ./path/to/configs
+
+  # Run recursively and save logs to a custom output directory
+  python CoinGame_parallel_runner.py ./path/to/configs -r -o ./my_run_results
+
+  # Run with a specific number of parallel jobs (e.g., 8)
+  python CoinGame_parallel_runner.py ./path/to/configs --jobs 8
+"""
+
 import subprocess
 import os
 import logging
 import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import argparse
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,61 +36,147 @@ logging.basicConfig(
     force=True
 )
 
-CONFIG_DIR = Path("/Users/ruzejjur/Github/ARAMARL_TMDP_DP/TMDP_DP/configs/article_configs/push_true")
-DEFAULT_JOBS = max(1, (os.cpu_count() or 1))  # sensible default
+def run_one(config_path: Path, log_parent_dir: Path) -> tuple[str, int]:
+    """
+    Executes a single experiment subprocess and captures its output.
 
-def run_one(config_path: str) -> tuple[str, int]:
-    """Run a single config to completion; return (name, exitcode)."""
-    cfg_name = Path(config_path).stem
+    This function is the "worker" task that is submitted to the thread pool.
+    It takes a single configuration file, runs 'CoinGame_runner.py' in a
+    separate process, and waits for it to complete.
+
+    Args:
+        config_path: The absolute path to the .yaml configuration file.
+        log_parent_dir: The parent directory where the 'logs' subdirectory
+                        will be created.
+
+    Returns:
+        A tuple containing:
+            - str: The clean name of the configuration (e.g., 'config_A').
+            - int: The exit code of the subprocess (0 for success).
+
+    Side Effects:
+        - Creates the log directory if it doesn't exist.
+        - Writes the standard output and error of the subprocess to
+          '{config_name}.out' and '{config_name}.err' files, respectively.
+    """
+    # Extract the final part of the path without extension
+    config_name = Path(config_path).stem
     
-    log_dir = Path("results/logs")
+    log_dir = log_parent_dir / "logs"
+    
     log_dir.mkdir(parents=True, exist_ok=True)
-    stdout_path = log_dir / f"{cfg_name}.out"
-    stderr_path = log_dir / f"{cfg_name}.err"
+    
+    stdout_path = log_dir / f"{config_name}.out"
+    stderr_path = log_dir / f"{config_name}.err"
 
-    cmd = [sys.executable, "CoinGame_runner.py", config_path]
-    logging.info(f"Starting: {cfg_name}")
+    # Run single experiment  
+    cmd = [sys.executable, "CoinGame_runner.py", str(config_path)]
+    
+    logging.info(f"Starting: {config_name}")
+    
     with open(stdout_path, "wb") as out, open(stderr_path, "wb") as err:
         proc = subprocess.Popen(cmd, stdout=out, stderr=err)
-        rc = proc.wait()
-    return cfg_name, rc
+        return_code = proc.wait()
+        
+    return config_name, return_code
 
-def run_parallel_experiments(jobs: int | None = None, recursive=False):
-    jobs = jobs or DEFAULT_JOBS
+def run_parallel_experiments(config_directory: Path, log_parent_dir: Path, jobs: int | None = None, recursive=False):
+    """
+    Discovers and runs all experiments in parallel using a thread pool.
+
+    Args:
+        config_directory: Path to the directory containing .yaml config files.
+        log_parent_dir: Path to the top-level directory for saving results.
+        jobs: The maximum number of experiments to run at once. If None,
+              it defaults to the system's CPU count.
+        recursive: If True, search for .yaml files in subdirectories as well.
+    """
+    
+    # Set default number of jobs to number of threads
+    # NOTE: os.cup_count() may return None in some specific cases, this is why we add  (os.cpu_count() or 1)
+    default_jobs = max(1, (os.cpu_count() or 1))
+    
+    jobs = jobs or default_jobs
+    
+    # Load (possibly recursively) all config_file_path files in a directory
     if recursive:
-        config_files = sorted(str(p.resolve()) for p in CONFIG_DIR.rglob("*.yaml"))
+        config_file_paths = sorted(p.resolve() for p in config_directory.rglob("*.yaml"))
     else:
-        config_files = sorted(str(p.resolve()) for p in CONFIG_DIR.glob("*.yaml"))
+        config_file_paths = sorted(p.resolve() for p in config_directory.glob("*.yaml"))
 
-    if not config_files:
-        logging.error(f"No .yaml configs found in: {CONFIG_DIR}")
+    if not config_file_paths:
+        logging.error(f"No .yaml configs found in: {config_directory}")
         return
 
-    jobs = max(1, min(jobs, len(config_files)))  # don’t spawn more workers than tasks
-    logging.info(f"Discovered {len(config_files)} configs. Running with jobs={jobs}.")
+    # Don’t spawn more workers than tasks
+    jobs = max(1, min(jobs, len(config_file_paths)))  
+    
+    logging.info(f"Discovered {len(config_file_paths)} configs. Running with jobs={jobs}.")
 
     # Run with at most `jobs` concurrent processes
     ok, fail = 0, 0
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        futs = {pool.submit(run_one, cfg): cfg for cfg in config_files}
-        for fut in as_completed(futs):
-            cfg = futs[fut]
+        futures = {pool.submit(run_one, config_file_path, log_parent_dir): config_file_path for config_file_path in config_file_paths}
+        
+        for future in as_completed(futures):
+            config_file_path = futures[future]
             try:
-                name, rc = fut.result()
-                if rc == 0:
-                    logging.info(f"Finished: {name} (0)")
+                name, return_code = future.result()
+                if return_code == 0:
+                    logging.info(f"FINISHED: {name} (0)")
                     ok += 1
                 else:
-                    logging.error(f"FAILED: {name} (exit {rc}) – see results/logs/{name}.err")
+                    log_file_path = log_parent_dir / "logs" / f"{name}.err"
+                    logging.error(f"FAILED: {name} (exit {return_code}) – see {log_file_path}.")
                     fail += 1
+                    
             except Exception as e:
-                logging.exception(f"Exception while running {cfg}: {e}")
+                logging.exception(f"Exception while running {config_file_path}: {e}")
                 fail += 1
 
     logging.info(f"Done. Success: {ok}, Failed: {fail}")
 
 if __name__ == "__main__":
-    # Optionally: read JOBS from env or CLI arg
-    jobs_env = os.getenv("JOBS")
-    jobs = int(jobs_env) if jobs_env and jobs_env.isdigit() else None
-    run_parallel_experiments(jobs=jobs, recursive=False)
+    
+    parser = argparse.ArgumentParser(
+        description="Run a series of experiments from .yaml configuration files in parallel."
+    )
+    parser.add_argument(
+        "config_directory", 
+        type=Path,
+        help="The path to the directory containing the .yaml configuration files."
+    )
+    
+    # Add a new argument for the output directory
+    parser.add_argument(
+        "-o", "--output",
+        type=Path,
+        default=Path("results"), # Sensible default
+        help="Parent directory to save results and logs."
+    )
+    
+    parser.add_argument(
+        "-j", "--jobs",
+        type=int,
+        help="Number of parallel jobs to run. Defaults to system CPU count or JOBS env var."
+    )
+    parser.add_argument(
+        "-r", "--recursive",
+        action="store_true",
+        help="If set, search for .yaml files in subdirectories recursively."
+    )
+    args = parser.parse_args()
+
+    # Logic to determine the number of jobs
+    num_jobs = args.jobs  # Prioritize the command-line flag
+    if num_jobs is None:
+        jobs_env = os.getenv("JOBS")
+        if jobs_env and jobs_env.isdigit():
+            num_jobs = int(jobs_env)
+            
+    run_parallel_experiments(
+        config_directory=args.config_directory, 
+        log_parent_dir=args.output, 
+        jobs=num_jobs, 
+        recursive=args.recursive
+    )
