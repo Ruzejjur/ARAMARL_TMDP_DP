@@ -29,12 +29,35 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - [PARALLEL_RUNNER] - %(levelname)s - %(message)s',
-    stream=sys.stdout,
-    force=True
-)
+def setup_logging(log_parent_dir: Path):
+    """Configures the root logger to output to console and a file."""
+    
+    # Define the log file path.
+    log_file = log_parent_dir / "parallel_runner.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Get the root logger.
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO) # Set the minimum level of messages to handle.
+
+    # Clear any existing handlers to avoid duplicate logs.
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    # Create a formatter to define the log message format.
+    formatter = logging.Formatter('%(asctime)s - [PARALLEL_RUNNER] - %(levelname)s - %(message)s')
+
+    # Create a handler to write to the console (stdout).
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Create a handler to write to the log file.
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 def run_one(config_path: Path, log_parent_dir: Path) -> tuple[str, int]:
     """
@@ -62,15 +85,17 @@ def run_one(config_path: Path, log_parent_dir: Path) -> tuple[str, int]:
     # Extract the final part of the path without extension
     config_name = Path(config_path).stem
     
-    log_dir = log_parent_dir / "logs"
+    log_dir = log_parent_dir / "run_logs"
     
     log_dir.mkdir(parents=True, exist_ok=True)
     
     stdout_path = log_dir / f"{config_name}.out"
     stderr_path = log_dir / f"{config_name}.err"
 
+    worker_script_path = SCRIPT_DIR / "CoinGame_runner.py"
+    
     # Run single experiment  
-    cmd = [sys.executable, "CoinGame_runner.py", str(config_path)]
+    cmd = [sys.executable, str(worker_script_path), str(config_path)]
     
     logging.info(f"Starting: {config_name}")
     
@@ -126,7 +151,7 @@ def run_parallel_experiments(config_directory: Path, log_parent_dir: Path, jobs:
                     logging.info(f"FINISHED: {name} (0)")
                     ok += 1
                 else:
-                    log_file_path = log_parent_dir / "logs" / f"{name}.err"
+                    log_file_path = log_parent_dir / "run_logs" / f"{name}.err"
                     logging.error(f"FAILED: {name} (exit {return_code}) – see {log_file_path}.")
                     fail += 1
                     
@@ -166,6 +191,9 @@ if __name__ == "__main__":
         help="If set, search for .yaml files in subdirectories recursively."
     )
     args = parser.parse_args()
+    
+    # Call our setup function with the output directory provided by the user.
+    setup_logging(args.output)
 
     # Logic to determine the number of jobs
     num_jobs = args.jobs  # Prioritize the command-line flag
