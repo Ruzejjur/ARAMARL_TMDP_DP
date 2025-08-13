@@ -8,7 +8,7 @@ Optimization_plan.rtf
 *.yaml
 *.npy
 *.jpg
-
+*.txt
 
 !config_template.yaml
 

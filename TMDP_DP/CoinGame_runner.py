@@ -47,6 +47,14 @@ if __name__ == "__main__":
         type=Path,
         help="The path to the .yaml configuration file for the experiment."
     )
+
+    # Define results directory from the parallel runner argument
+    parser.add_argument(
+        "--result-dir",
+        type=Path,
+        required=True, # Make this required when run by the parallel script
+        help="The base directory where final experiment results should be saved."
+    )
     
     # Define an optional flag to control trajectory logging
     parser.add_argument(
@@ -61,8 +69,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Call the main function with the parsed arguments
-    results_path = run_experiment(args.config_file, log_trajectory=args.log_trajectory)
-    
+    results_path = run_experiment(
+        config_file_path=str(args.config_file), 
+        log_trajectory=args.log_trajectory,
+        base_output_dir=args.result_dir # Pass the new argument
+    )
     print("="*50)
     print("Experiment finished successfully.")
     print(f"Results have been saved in: {results_path}")

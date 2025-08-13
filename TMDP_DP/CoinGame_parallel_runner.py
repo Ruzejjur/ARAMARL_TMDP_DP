@@ -12,9 +12,9 @@ successful and failed jobs.
 
 Usage Examples:
   # Run all configs in a directory using default CPU count
-  python CoinGame_parallel_runner.py ./path/to/configs
+  python CoinGame_parallel_runner.py ./path/to/configs -o ./my_run_results
 
-  # Run recursively and save logs to a custom output directory
+  # Run recursively and save results to a custom output directory
   python CoinGame_parallel_runner.py ./path/to/configs -r -o ./my_run_results
 
   # Run with a specific number of parallel jobs (e.g., 8)
@@ -28,12 +28,15 @@ import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
+from datetime import datetime
 
-def setup_logging(log_parent_dir: Path):
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+def setup_logging(run_directory: Path):
     """Configures the root logger to output to console and a file."""
     
     # Define the log file path.
-    log_file = log_parent_dir / "parallel_runner.log"
+    log_file = run_directory / "parallel_runner.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Get the root logger.
@@ -56,10 +59,8 @@ def setup_logging(log_parent_dir: Path):
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    
-SCRIPT_DIR = Path(__file__).resolve().parent
 
-def run_one(config_path: Path, log_parent_dir: Path) -> tuple[str, int]:
+def run_one(config_path: Path, run_directory: Path) -> tuple[str, int]:
     """
     Executes a single experiment subprocess and captures its output.
 
@@ -68,9 +69,8 @@ def run_one(config_path: Path, log_parent_dir: Path) -> tuple[str, int]:
     separate process, and waits for it to complete.
 
     Args:
-        config_path: The absolute path to the .yaml configuration file.
-        log_parent_dir: The parent directory where the 'logs' subdirectory
-                        will be created.
+        config_path: Path to the .yaml configuration file.
+        run_directory: The unique top-level directory for this entire parallel run.
 
     Returns:
         A tuple containing:
@@ -85,17 +85,25 @@ def run_one(config_path: Path, log_parent_dir: Path) -> tuple[str, int]:
     # Extract the final part of the path without extension
     config_name = Path(config_path).stem
     
-    log_dir = log_parent_dir / "run_logs"
+    subprocess_log_dir = run_directory / "run_logs"
+    subprocess_log_dir.mkdir(parents=True, exist_ok=True)
     
-    log_dir.mkdir(parents=True, exist_ok=True)
-    
-    stdout_path = log_dir / f"{config_name}.out"
-    stderr_path = log_dir / f"{config_name}.err"
+    stdout_path = subprocess_log_dir / f"{config_name}.out"
+    stderr_path = subprocess_log_dir / f"{config_name}.err"
 
     worker_script_path = SCRIPT_DIR / "CoinGame_runner.py"
     
+    # Define path for individual run results
+    individual_run_result_dir = run_directory / "run_results"
+    
     # Run single experiment  
-    cmd = [sys.executable, str(worker_script_path), str(config_path)]
+    cmd = [
+        sys.executable, 
+        str(worker_script_path), 
+        str(config_path), 
+        "--result-dir", 
+        str(individual_run_result_dir)
+    ]
     
     logging.info(f"Starting: {config_name}")
     
@@ -105,13 +113,13 @@ def run_one(config_path: Path, log_parent_dir: Path) -> tuple[str, int]:
         
     return config_name, return_code
 
-def run_parallel_experiments(config_directory: Path, log_parent_dir: Path, jobs: int | None = None, recursive=False):
+def run_parallel_experiments(config_directory: Path, run_directory: Path, jobs: int | None = None, recursive=False):
     """
     Discovers and runs all experiments in parallel using a thread pool.
 
     Args:
         config_directory: Path to the directory containing .yaml config files.
-        log_parent_dir: Path to the top-level directory for saving results.
+        run_directory: Path to the top-level directory for saving results.
         jobs: The maximum number of experiments to run at once. If None,
               it defaults to the system's CPU count.
         recursive: If True, search for .yaml files in subdirectories as well.
@@ -141,7 +149,7 @@ def run_parallel_experiments(config_directory: Path, log_parent_dir: Path, jobs:
     # Run with at most `jobs` concurrent processes
     ok, fail = 0, 0
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = {pool.submit(run_one, config_file_path, log_parent_dir): config_file_path for config_file_path in config_file_paths}
+        futures = {pool.submit(run_one, config_file_path, run_directory): config_file_path for config_file_path in config_file_paths}
         
         for future in as_completed(futures):
             config_file_path = futures[future]
@@ -151,7 +159,7 @@ def run_parallel_experiments(config_directory: Path, log_parent_dir: Path, jobs:
                     logging.info(f"FINISHED: {name} (0)")
                     ok += 1
                 else:
-                    log_file_path = log_parent_dir / "run_logs" / f"{name}.err"
+                    log_file_path = run_directory / "run_logs" / f"{name}.err"
                     logging.error(f"FAILED: {name} (exit {return_code}) – see {log_file_path}.")
                     fail += 1
                     
@@ -171,13 +179,12 @@ if __name__ == "__main__":
         type=Path,
         help="The path to the directory containing the .yaml configuration files."
     )
-    
-    # Add a new argument for the output directory
+
     parser.add_argument(
         "-o", "--output",
         type=Path,
         default=Path("results"), # Sensible default
-        help="Parent directory to save results and logs."
+        help="Base directory to save the unique run folder."
     )
     
     parser.add_argument(
@@ -192,8 +199,14 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     
+    # Generate unique run directory
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    unique_run_name = f"parallel_run_{timestamp}"
+    unique_run_dir = args.output / unique_run_name
+
+    
     # Call our setup function with the output directory provided by the user.
-    setup_logging(args.output)
+    setup_logging(unique_run_dir)
 
     # Logic to determine the number of jobs
     num_jobs = args.jobs  # Prioritize the command-line flag
@@ -204,7 +217,7 @@ if __name__ == "__main__":
             
     run_parallel_experiments(
         config_directory=args.config_directory, 
-        log_parent_dir=args.output, 
+        run_directory=unique_run_dir, 
         jobs=num_jobs, 
         recursive=args.recursive
     )

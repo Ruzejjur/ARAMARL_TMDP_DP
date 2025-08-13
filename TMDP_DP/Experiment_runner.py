@@ -18,6 +18,8 @@ import inspect
 from datetime import datetime
 import shutil
 import sys
+from pathlib import Path 
+from typing import Union, Optional
 
 
 # Import your custom modules
@@ -282,7 +284,7 @@ def run_single_episode(env: CoinGame, p1: agents.BaseAgent, p2: agents.BaseAgent
             episode_result_p1,
             trajectory_log)
 
-def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
+def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None, log_trajectory: bool = False) -> str:
     """
     Main function to run the entire set of experiments based on the config.
 
@@ -292,8 +294,11 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
 
     Args:
         config_file_path (str): Path to the YAML experiment configuration file.
-        log_trajectory (bool): If True, a detailed log of the last episode of
-                               each run is saved for animation.
+        log_trajectory (bool): If True, a detailed log is saved.
+        base_output_dir (Path, optional): The base directory where the results
+            folder for this specific run will be created. If None, it falls
+            back to the path specified in the config file. Defaults to None.
+
 
     Returns:
         str: The path to the directory where results for this run were saved.
@@ -311,11 +316,25 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     experiment_name = exp_settings.get('name', 'experiment')
     run_dir_name = f"{experiment_name}_{timestamp}"
-    results_path = os.path.join(exp_settings['results_dir'], run_dir_name)
+    
+    # Determine the root directory for results.
+    if base_output_dir:
+        # If a base directory is provided by the parallel runner, USE IT.
+        root_results_dir = base_output_dir
+    else:
+        # This is the FALLBACK for running this script directly.
+        # It reads the base path from the config file.
+        logging.warning(
+            "No base_output_dir provided. Falling back to 'results_dir' from config file."
+        )
+        root_results_dir = Path(exp_settings['results_dir'])
+
+    # The final, unique path for this specific experiment's results.
+    results_path = Path(root_results_dir) / run_dir_name
     os.makedirs(results_path, exist_ok=True)
     
     # Setup logging
-    add_file_handler_to_logger(results_path)
+    add_file_handler_to_logger(str(results_path))
     
     logging.info("Results for this run will be saved in: %s", results_path)
     
@@ -794,6 +813,6 @@ def run_experiment(config_file_path:str, log_trajectory: bool = False) -> str:
     logging.info("Configuration file copied for reproducibility to %s", saved_config_path)
     
     
-    return results_path
+    return str(results_path)
     
     
