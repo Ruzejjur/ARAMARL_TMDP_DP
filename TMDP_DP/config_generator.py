@@ -39,7 +39,7 @@ BASE_CONFIG: dict[str, Any] = {
         "num_runs": 6,
         "num_episodes": 20000,
         "run_seed": 42,
-        "results_dir": "results/article_configs/push_true" # Used only if base output is not defined
+        "results_dir": "results/article_configs/push_false" # Used only if base output is not defined
                                                             #(as in case of the CoinGame_runner.py and CoinGame_parallel_runner.py)
     },
     "environment_settings": {
@@ -47,8 +47,8 @@ BASE_CONFIG: dict[str, Any] = {
         "params": {
             "grid_size": 7,
             "max_steps": 'Inf',
-            "enable_push": True,
-            "push_distance": 2,
+            "enable_push": False,
+            "push_distance": 0,
             "action_execution_probabilities": [0.7, 0.7],
             "rewards": {
                 "step_penalty": [-0.1, -0.1],
@@ -150,7 +150,7 @@ AGENT_PROFILES = {
         },
         "epsilon_decay_agent": {"type": "no_decay", "end": 0}
     },
-    "ManhattanAgent": {
+    "ManhattanAgent": { # Matchup with this agent is only viable when push is set to True!
         "class": "ManhattanAgent",
         # Heuristic agents might have no parameters defined in the config.
         # An empty 'params' is fine, as the create_agent factory handles it.
@@ -188,14 +188,14 @@ MATCHUPS = [
     ("LevelK_MDP_DP_Agent_Dynamic", "IndQLearningAgent"),
     ("LevelK_MDP_DP_Agent_Dynamic", "LevelKQAgent"),
     ("LevelK_MDP_DP_Agent_Dynamic", "ManhattanAgent_Passive"),
-    ("LevelK_MDP_DP_Agent_Dynamic", "ManhattanAgent"),
+    # ("LevelK_MDP_DP_Agent_Dynamic", "ManhattanAgent"), # This matchup is only viable when push is set to True!
     ("LevelK_MDP_DP_Agent_Dynamic", "LevelK_MDP_DP_Agent_Dynamic"),
 
     # LevelK_MDP_DP_Stationary vs. X
     ("LevelK_MDP_DP_Agent_Stationary", "IndQLearningAgent"),
     ("LevelK_MDP_DP_Agent_Stationary", "LevelKQAgent"),
     ("LevelK_MDP_DP_Agent_Stationary", "ManhattanAgent_Passive"),
-    ("LevelK_MDP_DP_Agent_Stationary", "ManhattanAgent"),
+    # ("LevelK_MDP_DP_Agent_Stationary", "ManhattanAgent"), # This matchup is only viable when push is set to True!
     ("LevelK_MDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Stationary"),
     ("LevelK_MDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Dynamic"),
 
@@ -203,7 +203,7 @@ MATCHUPS = [
     ("LevelK_TMDP_DP_Agent_Dynamic", "IndQLearningAgent"),
     ("LevelK_TMDP_DP_Agent_Dynamic", "LevelKQAgent"),
     ("LevelK_TMDP_DP_Agent_Dynamic", "ManhattanAgent_Passive"),
-    ("LevelK_TMDP_DP_Agent_Dynamic", "ManhattanAgent"),
+    # ("LevelK_TMDP_DP_Agent_Dynamic", "ManhattanAgent"), # This matchup is only viable when push is set to True!
     ("LevelK_TMDP_DP_Agent_Dynamic", "LevelK_MDP_DP_Agent_Dynamic"),
     ("LevelK_TMDP_DP_Agent_Dynamic", "LevelK_TMDP_DP_Agent_Dynamic"),
     
@@ -211,7 +211,7 @@ MATCHUPS = [
     ("LevelK_TMDP_DP_Agent_Stationary", "IndQLearningAgent"),
     ("LevelK_TMDP_DP_Agent_Stationary", "LevelKQAgent"),
     ("LevelK_TMDP_DP_Agent_Stationary", "ManhattanAgent_Passive"),
-    ("LevelK_TMDP_DP_Agent_Stationary", "ManhattanAgent"),
+    # ("LevelK_TMDP_DP_Agent_Stationary", "ManhattanAgent"), # This matchup is only viable when push is set to True!
     ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Stationary"),
     ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_TMDP_DP_Agent_Dynamic"),
     ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_TMDP_DP_Agent_Stationary"),
@@ -221,9 +221,9 @@ MATCHUPS = [
 
     # Offline Solvers vs. Heuristics
     ("MDP_DP_Agent_PerfectModel", "ManhattanAgent_Passive"),
-    ("MDP_DP_Agent_PerfectModel", "ManhattanAgent"),
+    # ("MDP_DP_Agent_PerfectModel", "ManhattanAgent"), # This matchup is only viable when push is set to True!
     ("TMDP_DP_Agent_PerfectModel", "ManhattanAgent_Passive"),
-    ("TMDP_DP_Agent_PerfectModel", "ManhattanAgent"),
+    # ("TMDP_DP_Agent_PerfectModel", "ManhattanAgent"), # This matchup is only viable when push is set to True!
 ]
 
 def generate_configs(output_dir: Path):
