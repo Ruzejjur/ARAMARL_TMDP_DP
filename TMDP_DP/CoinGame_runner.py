@@ -52,7 +52,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--result-dir",
         type=Path,
-        required=True, # Make this required when run by the parallel script
+        required=True,
         help="The base directory where final experiment results should be saved."
     )
     
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     results_path = run_experiment(
         config_file_path=str(args.config_file), 
         log_trajectory=args.log_trajectory,
-        base_output_dir=args.result_dir # Pass the new argument
+        base_output_dir=args.result_dir
     )
     print("="*50)
     print("Experiment finished successfully.")

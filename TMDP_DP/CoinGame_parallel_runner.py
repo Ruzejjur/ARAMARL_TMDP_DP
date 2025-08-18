@@ -205,7 +205,7 @@ if __name__ == "__main__":
     unique_run_dir = args.output / unique_run_name
 
     
-    # Call our setup function with the output directory provided by the user.
+    # Call log setup function with the output directory provided by the user.
     setup_logging(unique_run_dir)
 
     # Logic to determine the number of jobs

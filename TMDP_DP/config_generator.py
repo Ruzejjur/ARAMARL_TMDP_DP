@@ -19,6 +19,15 @@ from pathlib import Path
 import copy
 import argparse
 from typing import Any
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    stream=sys.stdout,
+    force=True
+)
 
 # =============================================================================
 # 1. DEFINE THE BASE CONFIGURATION
@@ -30,7 +39,8 @@ BASE_CONFIG: dict[str, Any] = {
         "num_runs": 6,
         "num_episodes": 20000,
         "run_seed": 42,
-        "results_dir": "results/article_configs/push_true"
+        "results_dir": "results/article_configs/push_true" # Used only if base output is not defined
+                                                            #(as in case of the CoinGame_runner.py and CoinGame_parallel_runner.py)
     },
     "environment_settings": {
         "class": "CoinGame",
@@ -142,7 +152,7 @@ AGENT_PROFILES = {
     },
     "ManhattanAgent": {
         "class": "ManhattanAgent",
-        # Heuristic agents might not have parameters defined in the config.
+        # Heuristic agents might have no parameters defined in the config.
         # An empty 'params' is fine, as the create_agent factory handles it.
     },
     "ManhattanAgent_Passive": {
@@ -223,7 +233,7 @@ def generate_configs(output_dir: Path):
     Args:
         output_dir (Path): The directory where the generated .yaml files will be saved.
     """
-    print(f"Generating configuration files in: {output_dir}")
+    logging.info(f"Generating configuration files in: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     generated_count = 0
@@ -246,7 +256,7 @@ def generate_configs(output_dir: Path):
             player_1_profile = AGENT_PROFILES[p1_name]
             player_2_profile = AGENT_PROFILES[p2_name]
         except KeyError as e:
-            print(f"ERROR: Agent profile '{e.args[0]}' not found in AGENT_PROFILES. Skipping this matchup.")
+            logging.error(f"Agent profile '{e.args[0]}' not found in AGENT_PROFILES. Skipping this matchup.")
             continue
 
         config["agent_settings"] = {
@@ -263,9 +273,9 @@ def generate_configs(output_dir: Path):
             yaml.dump(config, f, sort_keys=False, indent=2)
         
         generated_count += 1
-        print(f"  -> Saved {output_filename}")
+        logging.info(f"  -> Saved {output_filename}")
         
-    print(f"\nSuccessfully generated {generated_count} configuration files.")
+    logging.info(f"\nSuccessfully generated {generated_count} configuration files.")
 
 
 if __name__ == "__main__":
@@ -274,6 +284,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-o", "--output-dir",
+        dest="output_dir",
         type=Path,
         required=True,
         help="The directory where the generated .yaml files will be saved."
