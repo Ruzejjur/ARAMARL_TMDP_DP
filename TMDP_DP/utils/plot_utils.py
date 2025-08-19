@@ -7,6 +7,8 @@ import matplotlib.animation as animation
 import matplotlib.ticker as mticker
 import mplcursors
 
+from utils.trajectory_log_schema import TRAJECTORY_LOG_COLUMN_MAP
+
 def moving_average(array, moving_average_window_size=3):
     """
     Compute the right-aligned moving average of a 1D array.
@@ -212,7 +214,7 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
 
     plt.show()
         
-def animate_trajectory_from_log(trajectory_log, grid_size=4, fps=4, dpi=100):
+def animate_trajectory_from_log(trajectory_episode_array, grid_size=4, fps=4, dpi=100):
     """
     Animate a trajectory from an enriched trajectory log that includes actions and rewards.
     """
@@ -229,7 +231,7 @@ def animate_trajectory_from_log(trajectory_log, grid_size=4, fps=4, dpi=100):
     info_text = fig.text(0.02, 0.5, "", ha='left', va='center', fontsize=10)
     
     move_action_codes = ["Down", "Right", "Up", "Left"]
-    action_push_codes = ["No push", "Push"]
+    push_action_codes = ["No push", "Push"]
 
     # Agent and coin markers
     dm_dot, = ax.plot([], [], 'bo', label='DM (Blue)')
@@ -245,96 +247,83 @@ def animate_trajectory_from_log(trajectory_log, grid_size=4, fps=4, dpi=100):
         coin1_dot.set_data([], [])
         coin2_dot.set_data([], [])
         title.set_text("")
-        return dm_dot, adv_dot, coin1_dot, coin2_dot, title
+        info_text.set_text("")
+        return dm_dot, adv_dot, coin1_dot, coin2_dot, title, info_text
 
     def update(frame):
-        state = trajectory_log[frame]
+        state = trajectory_episode_array[frame]
 
+        dm_col, dm_row = state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_new_col']], state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_new_row']]
+        adv_col, adv_row = state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_new_col']], state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_new_row']]
         
-        if isinstance(state['p0_loc_new'], (list, np.ndarray)) and len(state['p0_loc_new']) == 2:
-            dm_dot.set_data([state['p0_loc_new'][1]], [state['p0_loc_new'][0]])
-        else:
-            dm_dot.set_data([], [])
+        dm_dot.set_data([dm_col], [dm_row])
+        adv_dot.set_data([adv_col], [adv_row])
 
-        if isinstance(state['p1_loc_new'], (list, np.ndarray)) and len(state['p1_loc_new']) == 2:
-            adv_dot.set_data([state['p1_loc_new'][1]], [state['p1_loc_new'][0]])
+        # Check for if coin location is non None
+        if state[TRAJECTORY_LOG_COLUMN_MAP['coin1_row']] != -1:
+            coin1_dot.set_data([state[TRAJECTORY_LOG_COLUMN_MAP['coin1_col']]], [state[TRAJECTORY_LOG_COLUMN_MAP['coin1_row']]])
         else:
-            adv_dot.set_data([], [])
+            coin1_dot.set_data([-10], [-10]) # hide
 
-        if isinstance(state['coin1'], (list, np.ndarray)) and len(state['coin1']) == 2:
-            coin1_dot.set_data([state['coin1'][1]], [state['coin1'][0]])
+        if state[TRAJECTORY_LOG_COLUMN_MAP['coin2_row']] != -1:
+            coin2_dot.set_data([state[TRAJECTORY_LOG_COLUMN_MAP['coin2_col']]], [state[TRAJECTORY_LOG_COLUMN_MAP['coin2_row']]])
         else:
-            coin1_dot.set_data([-10], [-10])  # hide
+            coin2_dot.set_data([-10], [-10]) # hide
 
-        if isinstance(state['coin2'], (list, np.ndarray)) and len(state['coin2']) == 2:
-            coin2_dot.set_data([state['coin2'][1]], [state['coin2'][0]])
-        else:
-            coin2_dot.set_data([-10], [-10])  # hide
-
-        title.set_text(
-            f"Exp {state['experiment'] + 1} | Ep {state['epoch'] + 1} | Step {frame}"
-        )
+        exp_num = int(state[TRAJECTORY_LOG_COLUMN_MAP['experiment_num']])
+        ep_num = int(state[TRAJECTORY_LOG_COLUMN_MAP['episode_num']])
+        step_num = int(state[TRAJECTORY_LOG_COLUMN_MAP['step_num']])
+        title.set_text(f"Exp {exp_num + 1} | Ep {ep_num + 1} | Step {step_num}")
         
-        if(np.array_equal(state['p0_action'], ["None", "None"])): 
-            DM_action_string = ["None", "None"]
-        else: 
-            DM_action_string = f"DM Action: [{move_action_codes[state['p0_action'][0]]}, {action_push_codes[state['p0_action'][1]]}]"
-            
-        if(np.array_equal(state['p1_action'], ["None", "None"])): 
-            Adv_action_string = ["None", "None"]
-        else: 
-            Adv_action_string = f"Adv Action: [{move_action_codes[state['p1_action'][0]]}, {action_push_codes[state['p1_action'][1]]}]"
-        
-        if state['p0_reward'] is not None:
-            p0_reward = round(state['p0_reward'], 3)
-        else: 
-            p0_reward = "None"
-            
-        if state['p1_reward'] is not None:
-            p1_reward = round(state['p1_reward'], 3)
-        else: 
-            p1_reward = "None"
-            
-        if state['p0_cum_reward'] is not None:
-            p0_cum_reward = round(state['p0_cum_reward'], 3)
-        else: 
-            p0_cum_reward = "None"
+        # Handle sentinel values for actions/locations
+        p0_old_row, p0_old_col = int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_old_row']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_old_col']])
+        p1_old_row, p1_old_col = int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_old_row']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_old_col']])
+        p0_loc_old_str = f"[{p0_old_col}, {p0_old_row}]" if p0_old_row != -1 else "None"
+        p1_loc_old_str = f"[{p1_old_col}, {p1_old_row}]" if p1_old_row != -1 else "None"
 
-        if state['p1_cum_reward'] is not None:
-            p1_cum_reward = round(state['p1_cum_reward'], 3)
-        else: 
-            p1_cum_reward = "None"
+        p0_move, p0_push = int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_action_move']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_action_push']])
+        p1_move, p1_push = int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_action_move']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_action_push']])
+        p0_action_str = f"DM Action: [{move_action_codes[p0_move]}, {push_action_codes[p0_push]}]" if p0_move != -1 else "DM Action: None"
+        p1_action_str = f"Adv Action: [{move_action_codes[p1_move]}, {push_action_codes[p1_push]}]" if p1_move != -1 else "Adv Action: None"
+        
+        p0_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p0_reward']]
+        p1_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p1_reward']]
+        p0_reward_str = f"DM reward: {p0_reward:.3f}" if p0_reward != -1 else "DM reward: None"
+        p1_reward_str = f"Adv reward: {p1_reward:.3f}" if p0_reward != -1 else "Adv reward: None"
+        
+        p0_cum_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p0_cum_reward']]
+        p1_cum_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p1_cum_reward']]
+        p0_cum_reward_str = f"DM cumulative reward: {p0_cum_reward:.3f}" if p0_cum_reward != -1 else "DM reward: None"
+        p1_cum_reward_str = f"Adv cumulative reward: {p1_cum_reward:.3f}" if p1_cum_reward != -1 else "Adv reward: None"
         
         # Update a text box the grid for step and reward info
         info_text.set_text(
-            (
-                f"Prev. location DM: [{state['p0_loc_old'][0]}, {state['p0_loc_old'][1]}]\n"
-                f"Curr. location DM: [{state['p0_loc_new'][0]}, {state['p0_loc_new'][1]}]\n"
-                f"{DM_action_string}\n"
-                f"DM reward: {p0_reward}\n"
-                f"DM cumulative reward: {p0_cum_reward}\n"
-                f"\n"  # This adds a visual separation
-                f"Prev. location Adv: [{state['p1_loc_old'][0]}, {state['p1_loc_old'][1]}]\n"
-                f"Curr. location Adv: [{state['p1_loc_new'][0]}, {state['p1_loc_new'][1]}]\n"
-                f"{Adv_action_string}\n"
-                f"Adv reward: {p1_reward}\n"
-                f"Adv cumulative reward: {p1_cum_reward}\n"
-            )
+            f"Prev. location DM: {p0_loc_old_str}\n"
+            f"Curr. location DM: [{int(dm_col)}, {int(dm_row)}]\n"
+            f"{p0_action_str}\n"
+            f"{p0_reward_str}\n"
+            f"{p0_cum_reward_str}\n"
+            f"\n"
+            f"Prev. location Adv: {p1_loc_old_str}\n"
+            f"Curr. location Adv: [{int(adv_col)}, {int(adv_row)}]\n"
+            f"{p1_action_str}\n"
+            f"{p1_reward_str}\n"
+            f"{p1_cum_reward_str}\n"
         )
 
-        return dm_dot, adv_dot, coin1_dot, coin2_dot, title
+        return dm_dot, adv_dot, coin1_dot, coin2_dot, title, info_text
 
     ani = animation.FuncAnimation(
         fig, update,
-        frames=len(trajectory_log),
+        frames=trajectory_episode_array.shape[0],
         init_func=init,
-        blit=False,
+        blit=False, # Blit can be tricky with text, False is safer
         repeat=False
     )
     ani.save("trajectory.mp4", writer="ffmpeg", fps=fps, dpi=dpi)
     
     # Render and save the last frame as PNG with transparent background
-    # update(len(trajectory_log)) 
+    # update(len(trajectory_episode_array)) 
     # fig.patch.set_alpha(0.0)  # Make background transparent
     # fig.savefig("Coin_game_example.png", dpi=1000, transparent=False, bbox_inches='tight')
     
