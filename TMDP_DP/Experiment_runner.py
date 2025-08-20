@@ -789,71 +789,71 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     
     # Save trajectory logs if enabled.
     if log_trajectory:
-        traj_path = os.path.join(results_path, 'trajectory_log.npy')
-        save_array = np.array(trajectory_logs_all_experiments, dtype=np.float32) # Converting into object so the array cah be saved 
-        np.save(traj_path, save_array)
+        traj_path = os.path.join(results_path, 'trajectory_log.npz')
+        save_array = np.array(trajectory_logs_all_experiments, dtype=np.float32) 
+        np.savez_compressed(traj_path, trajectory_logs_all_experiments = save_array)
         
         logging.info(f"Trajectory log saved to {traj_path}. Shape: {save_array.shape}")
     
     # Save accumulated reward data for each experiment
     
     # Saving full rewards
-    p0_full_rewards_path = os.path.join(results_path, 'full_rewards_per_episode_p0.npy')
-    np.save(p0_full_rewards_path, np.array(full_rewards_p0))
+    p0_full_rewards_path = os.path.join(results_path, 'full_rewards_per_episode_p0.npz')
+    np.savez_compressed(p0_full_rewards_path, full_rewards_p0 = np.array(full_rewards_p0))
     logging.info("Full rewards for player 1 saved to %s.", p0_full_rewards_path)
     
-    p1_full_rewards_path = os.path.join(results_path, 'full_rewards_per_episode_p1.npy')
-    np.save(p1_full_rewards_path, np.array(full_rewards_p1))
+    p1_full_rewards_path = os.path.join(results_path, 'full_rewards_per_episode_p1.npz')
+    np.savez_compressed(p1_full_rewards_path, full_rewards_p1 = np.array(full_rewards_p1))
     logging.info("Full rewards for player 2 saved to %s.", p1_full_rewards_path)
     
     # Saving positive rewards
-    p0_positive_rewards_path = os.path.join(results_path, 'positive_rewards_per_episode_p0.npy')
-    np.save(p0_positive_rewards_path, np.array(positive_rewards_p0))
+    p0_positive_rewards_path = os.path.join(results_path, 'positive_rewards_per_episode_p0.npz')
+    np.savez_compressed(p0_positive_rewards_path, positive_rewards_p0 = np.array(positive_rewards_p0))
     logging.info("Positive rewards for player 1 saved to %s.", p0_positive_rewards_path)
     
-    p1_positive_rewards_path = os.path.join(results_path, 'positive_rewards_per_episode_p1.npy')
-    np.save(p1_positive_rewards_path, np.array(positive_rewards_p1))
+    p1_positive_rewards_path = os.path.join(results_path, 'positive_rewards_per_episode_p1.npz')
+    np.savez_compressed(p1_positive_rewards_path, positive_rewards_p1 = np.array(positive_rewards_p1))
     logging.info("Positive rewards for player 2 saved to %s.", p1_positive_rewards_path)
     
     # Saving negative rewards
-    p0_negative_rewards_path = os.path.join(results_path, 'negative_rewards_per_episode_p0.npy')
-    np.save(p0_negative_rewards_path, np.array(negative_rewards_p0))
+    p0_negative_rewards_path = os.path.join(results_path, 'negative_rewards_per_episode_p0.npz')
+    np.savez_compressed(p0_negative_rewards_path, negative_rewards_p0 = np.array(negative_rewards_p0))
     logging.info("Negative rewards for player 1 saved to %s.", p0_negative_rewards_path)
     
-    p1_negative_rewards_path = os.path.join(results_path, 'negative_rewards_per_episode_p1.npy')
-    np.save(p1_negative_rewards_path, np.array(negative_rewards_p1))
+    p1_negative_rewards_path = os.path.join(results_path, 'negative_rewards_per_episode_p1.npz')
+    np.savez_compressed(p1_negative_rewards_path, negative_rewards_p1 = np.array(negative_rewards_p1))
     logging.info("Negative rewards for player 2 saved to %s.", p1_negative_rewards_path)
     
     # Saving only step rewards
-    p0_only_step_rewards_path = os.path.join(results_path, 'only_step_rewards_per_episode_p0.npy')
-    np.save(p0_only_step_rewards_path, np.array(only_step_rewards_p0))
+    p0_only_step_rewards_path = os.path.join(results_path, 'only_step_rewards_per_episode_p0.npz')
+    np.savez_compressed(p0_only_step_rewards_path, only_step_rewards_p0 = np.array(only_step_rewards_p0))
     logging.info("Only step rewards for player 1 saved to %s.", p0_only_step_rewards_path)
     
-    p1_only_step_rewards_path = os.path.join(results_path, 'only_step_rewards_per_episode_p1.npy')
-    np.save(p1_only_step_rewards_path, np.array(only_step_rewards_p1))
+    p1_only_step_rewards_path = os.path.join(results_path, 'only_step_rewards_per_episode_p1.npz')
+    np.savez_compressed(p1_only_step_rewards_path, only_step_rewards_p1 = np.array(only_step_rewards_p1))
     logging.info("Only step rewards for player 2 saved to %s.", p1_only_step_rewards_path)
     
     # Saving full rewards without coins
-    p0_full_rewards_without_coin_path = os.path.join(results_path, 'full_rewards_without_coin_per_episode_p0.npy')
-    np.save(p0_full_rewards_without_coin_path, np.array(full_rewards_without_coin_p0))
+    p0_full_rewards_without_coin_path = os.path.join(results_path, 'full_rewards_without_coin_per_episode_p0.npz')
+    np.savez_compressed(p0_full_rewards_without_coin_path, full_rewards_without_coin_p0 = np.array(full_rewards_without_coin_p0))
     logging.info("Full rewards without coin for player 1 saved to %s.", p0_full_rewards_without_coin_path)
     
-    p1_full_rewards_without_coin_path = os.path.join(results_path, 'full_rewards_without_coin_per_episode_p1.npy')
-    np.save(p1_full_rewards_without_coin_path, np.array(full_rewards_without_coin_p1))
+    p1_full_rewards_without_coin_path = os.path.join(results_path, 'full_rewards_without_coin_per_episode_p1.npz')
+    np.savez_compressed(p1_full_rewards_without_coin_path, full_rewards_without_coin_p1 = np.array(full_rewards_without_coin_p1))
     logging.info("Full rewards without coin for player 2 saved to %s.", p1_full_rewards_without_coin_path)
     
     # Saving full rewards without step
-    p0_full_rewards_without_step_path = os.path.join(results_path, 'full_rewards_without_step_per_episode_p0.npy')
-    np.save(p0_full_rewards_without_step_path, np.array(full_rewards_without_step_p0))
+    p0_full_rewards_without_step_path = os.path.join(results_path, 'full_rewards_without_step_per_episode_p0.npz')
+    np.savez_compressed(p0_full_rewards_without_step_path, full_rewards_without_step_p0 = np.array(full_rewards_without_step_p0))
     logging.info("Full rewards without step for player 1 saved to %s.", p0_full_rewards_without_step_path)
     
-    p1_full_rewards_without_step_path = os.path.join(results_path, 'full_rewards_without_step_per_episode_p1.npy')
-    np.save(p1_full_rewards_without_step_path, np.array(full_rewards_without_step_p1))
+    p1_full_rewards_without_step_path = os.path.join(results_path, 'full_rewards_without_step_per_episode_p1.npz')
+    np.savez_compressed(p1_full_rewards_without_step_path, full_rewards_without_step_p1 = np.array(full_rewards_without_step_p1))
     logging.info("Full rewards without step for player 2 saved to %s.", p1_full_rewards_without_step_path)
     
     # Save game results of player 1 for each experiment
-    game_result_p0_path = os.path.join(results_path, 'game_result_episode_p0.npy')
-    np.save(game_result_p0_path, np.array(game_result_p0))
+    game_result_p0_path = os.path.join(results_path, 'game_result_episode_p0.npz')
+    np.savez_compressed(game_result_p0_path, game_result_p0 = np.array(game_result_p0))
     logging.info("Game results for player 1 saved to %s.", game_result_p0_path)
     
     # Save the configuration file used for this run for full reproducibility.

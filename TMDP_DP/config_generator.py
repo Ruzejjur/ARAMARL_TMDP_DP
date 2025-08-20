@@ -40,7 +40,7 @@ BASE_CONFIG: dict[str, Any] = {
         "num_episodes": 20000,
         "run_seed": 42,
         "results_dir": "results/article_configs/push_false" # Used only if base output is not defined
-                                                            #(as in case of the CoinGame_runner.py and CoinGame_parallel_runner.py)
+                                                            #(in case of the CoinGame_runner.py and CoinGame_parallel_runner.py the output is defined)
     },
     "environment_settings": {
         "class": "CoinGame",

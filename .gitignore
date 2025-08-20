@@ -7,9 +7,11 @@ Optimization_plan.rtf
 *.joblib
 *.yaml
 *.npy
+*.npz
 *.jpg
 *.txt
 *.tiff
+*.lock
 
 !config_template.yaml
 
