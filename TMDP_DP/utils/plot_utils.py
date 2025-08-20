@@ -7,8 +7,6 @@ import matplotlib.animation as animation
 import matplotlib.ticker as mticker
 import mplcursors
 
-from utils.trajectory_log_schema import TRAJECTORY_LOG_COLUMN_MAP
-
 def moving_average(array, moving_average_window_size=3):
     """
     Compute the right-aligned moving average of a 1D array.
@@ -253,46 +251,46 @@ def animate_trajectory_from_log(trajectory_episode_array, grid_size=4, fps=4, dp
     def update(frame):
         state = trajectory_episode_array[frame]
 
-        dm_col, dm_row = state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_new_col']], state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_new_row']]
-        adv_col, adv_row = state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_new_col']], state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_new_row']]
+        dm_col, dm_row = state['p0_loc_new_col'], state['p0_loc_new_row']
+        adv_col, adv_row = state['p1_loc_new_col'], state['p1_loc_new_row']
         
         dm_dot.set_data([dm_col], [dm_row])
         adv_dot.set_data([adv_col], [adv_row])
 
         # Check for if coin location is non None
-        if state[TRAJECTORY_LOG_COLUMN_MAP['coin1_row']] != -1:
-            coin1_dot.set_data([state[TRAJECTORY_LOG_COLUMN_MAP['coin1_col']]], [state[TRAJECTORY_LOG_COLUMN_MAP['coin1_row']]])
+        if state['coin1_row'] != -1:
+            coin1_dot.set_data([state['coin1_col']], [state['coin1_row']])
         else:
             coin1_dot.set_data([-10], [-10]) # hide
 
-        if state[TRAJECTORY_LOG_COLUMN_MAP['coin2_row']] != -1:
-            coin2_dot.set_data([state[TRAJECTORY_LOG_COLUMN_MAP['coin2_col']]], [state[TRAJECTORY_LOG_COLUMN_MAP['coin2_row']]])
+        if state['coin2_row'] != -1:
+            coin2_dot.set_data([state['coin2_col']], [state['coin2_row']])
         else:
             coin2_dot.set_data([-10], [-10]) # hide
 
-        exp_num = int(state[TRAJECTORY_LOG_COLUMN_MAP['experiment_num']])
-        ep_num = int(state[TRAJECTORY_LOG_COLUMN_MAP['episode_num']])
-        step_num = int(state[TRAJECTORY_LOG_COLUMN_MAP['step_num']])
+        exp_num = int(state['experiment_num'])
+        ep_num = int(state['episode_num'])
+        step_num = int(state['step_num'])
         title.set_text(f"Exp {exp_num + 1} | Ep {ep_num + 1} | Step {step_num}")
         
         # Handle sentinel values for actions/locations
-        p0_old_row, p0_old_col = int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_old_row']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_loc_old_col']])
-        p1_old_row, p1_old_col = int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_old_row']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_loc_old_col']])
+        p0_old_row, p0_old_col = int(state['p0_loc_old_row']), int(state['p0_loc_old_col'])
+        p1_old_row, p1_old_col = int(state['p1_loc_old_row']), int(state['p1_loc_old_col'])
         p0_loc_old_str = f"[{p0_old_col}, {p0_old_row}]" if p0_old_row != -1 else "None"
         p1_loc_old_str = f"[{p1_old_col}, {p1_old_row}]" if p1_old_row != -1 else "None"
 
-        p0_move, p0_push = int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_action_move']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p0_action_push']])
-        p1_move, p1_push = int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_action_move']]), int(state[TRAJECTORY_LOG_COLUMN_MAP['p1_action_push']])
+        p0_move, p0_push = int(state['p0_action_move']), int(state['p0_action_push'])
+        p1_move, p1_push = int(state['p1_action_move']), int(state['p1_action_push'])
         p0_action_str = f"DM Action: [{move_action_codes[p0_move]}, {push_action_codes[p0_push]}]" if p0_move != -1 else "DM Action: None"
         p1_action_str = f"Adv Action: [{move_action_codes[p1_move]}, {push_action_codes[p1_push]}]" if p1_move != -1 else "Adv Action: None"
         
-        p0_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p0_reward']]
-        p1_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p1_reward']]
+        p0_reward = state['p0_reward']
+        p1_reward = state['p1_reward']
         p0_reward_str = f"DM reward: {p0_reward:.3f}" if p0_reward != -1 else "DM reward: None"
         p1_reward_str = f"Adv reward: {p1_reward:.3f}" if p0_reward != -1 else "Adv reward: None"
         
-        p0_cum_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p0_cum_reward']]
-        p1_cum_reward = state[TRAJECTORY_LOG_COLUMN_MAP['p1_cum_reward']]
+        p0_cum_reward = state['p0_cum_reward']
+        p1_cum_reward = state['p1_cum_reward']
         p0_cum_reward_str = f"DM cumulative reward: {p0_cum_reward:.3f}" if p0_cum_reward != -1 else "DM reward: None"
         p1_cum_reward_str = f"Adv cumulative reward: {p1_cum_reward:.3f}" if p1_cum_reward != -1 else "Adv reward: None"
         
