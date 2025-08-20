@@ -8,6 +8,7 @@ characterized by two methods:
 - reset: Resets the simulator to its initial state for a new episode.
 """
 import numpy as np
+import collections
 
 class CoinGame():
     """
@@ -85,6 +86,8 @@ class CoinGame():
             self.timeout_penalty_delta_0, self.timeout_penalty_delta_1 = rewards['timeout_penalty_delta']
             self.timeout_lead_bonus_delta_0, self.timeout_lead_bonus_delta_1 = rewards['timeout_lead_bonus_delta']
             self.timeout_trail_penalty_delta_0, self.timeout_trail_penalty_delta_1 = rewards['timeout_trail_penalty_delta']
+            
+            self._rewards_config = rewards
         
         except KeyError as e: 
             raise KeyError(
@@ -134,6 +137,13 @@ class CoinGame():
         
         # Call reset at the beggining to be save
         self.reset()
+        
+    def get_reward_config(self) -> dict:
+        """
+        Returns a copy of the original rewards dictionary used for initialization.
+        """
+        # Return a sorted dictionary 
+        return collections.OrderedDict(sorted(self._rewards_config.items()))
         
     def _resolve_action(self, player_id: int, intended_action_id: int) -> tuple:
         """

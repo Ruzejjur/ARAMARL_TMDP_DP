@@ -3,6 +3,10 @@ from numpy.random import choice
 import copy
 from typing import cast, Optional
 from tqdm.auto import tqdm
+import hashlib
+import logging
+from pathlib import Path 
+import filelock
 
 
 from .base import LearningAgent
@@ -92,11 +96,64 @@ class _BaseLevelK_MDP_DP_Agent(LearningAgent):
         # --- Value Function and Model Initialization ---
         # V(s): The value of being in state 's'.
         self.V = self._setup_value_function(self.initial_V_value)
-            
-        # Pre-compute (s, a_self_executed, a_opp_executed) -> (s', r) lookup tables.
+
+        # --- Lookup tables computation ---
+        # Pre-compute and save (s, a_self_executed, a_opp_executed) -> (s', r) lookup tables.
         # These tensors store the outcomes for every state and *executed* action pair
         # mapped to resulting s'. 
-        self.s_prime_lookup, self.r_lookup  = self._precompute_lookups()
+        # If it was precomputed in the past retrieve the tables from the cache
+        
+        # Determine the project's root directory
+        #    __file__ is the path to the current script (e.g., .../agents/mdp_dp.py)
+        #    .parent gives the directory of the script (.../agents/)
+        #    .parent again gives the project root (.../TMDP_DP/)
+        SCRIPT_DIR = Path(__file__).resolve().parent
+        PROJECT_ROOT = SCRIPT_DIR.parent
+        
+        # Define the cache directory relative to the project root
+        cache_dir = PROJECT_ROOT / "results" / "agent_lookup_cache"
+        
+        # Create a unique signature based on environment params and player_id
+        env_params_for_hash = {
+            'grid_size': env.grid_size,
+            'enable_push': env.enable_push,
+            'push_distance': env.push_distance,
+            'rewards': env.get_reward_config() 
+        }
+        
+        # Convert dict to a canonical string representation (sorted keys)
+        params_string = repr(env_params_for_hash)
+        
+        # Create a unique hash for this configuration + player_id
+        hasher = hashlib.sha256()
+        hasher.update(params_string.encode('utf-8'))
+        hasher.update(str(player_id).encode('utf-8'))
+        config_hash = hasher.hexdigest()
+        
+        cache_filename = cache_dir / f"lookups_{config_hash}.npz"
+        lock_filename = cache_dir / f"lookups_{config_hash}.npz.lock"
+
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get the file lock for the specific file name
+        lock = filelock.FileLock(lock_filename)
+        
+        with lock:
+            # Now that we have the lock, we must check AGAIN if the file exists.
+            # Another process might have created it while we were waiting for the lock.
+            if cache_filename.exists():
+                # Cache HIT: The file was created by another process. We can just load it.
+                logging.info(f"CACHE HIT for Player {player_id}. Loading from {cache_filename}")
+                with np.load(cache_filename) as data:
+                    self.s_prime_lookup = data['s_prime_lookup']
+                    self.r_lookup = data['r_lookup']
+            else:
+                # Cache MISS: We are the first and only process here. Time to do the work.
+                logging.info(f"CACHE MISS for Player {player_id}. Pre-computing lookups...")
+                self.s_prime_lookup, self.r_lookup  = self._precompute_lookups()
+                
+                logging.info(f"Saving computed lookups to cache: {cache_filename}")
+                np.savez_compressed(cache_filename, s_prime_lookup=self.s_prime_lookup, r_lookup=self.r_lookup)
         
         # --- Opponent Model Initialization (handled by subclasses) ---
         self.opponent = None
