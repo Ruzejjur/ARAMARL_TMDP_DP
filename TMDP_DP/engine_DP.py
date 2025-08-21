@@ -166,7 +166,7 @@ class CoinGame():
         if exec_prob >= 1.0:
             actual_move = intended_move
             
-        if np.random.rand() < exec_prob:
+        elif np.random.rand() < exec_prob:
             actual_move = intended_move
         else:
             alternatives = [a for a in self.available_move_actions if a != intended_move]
