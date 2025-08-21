@@ -690,7 +690,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     plot_reward_per_episode_series(full_rewards_p0, full_rewards_p1, plot_title,
          moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'], 
-         dir=plot_path)
+         dir=plot_path, plot_bands=config['plot_reward_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting cumulative positive rewards 
@@ -701,7 +701,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     plot_reward_per_episode_series(positive_rewards_p0, positive_rewards_p1, plot_title,
          moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
-         dir=plot_path)
+         dir=plot_path, plot_bands=config['plot_reward_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting cumulative negative rewards 
@@ -712,7 +712,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     plot_reward_per_episode_series(negative_rewards_p0, negative_rewards_p1, plot_title,
          moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
-         dir=plot_path)
+         dir=plot_path, plot_bands=config['plot_reward_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting cumulative only step rewards 
@@ -723,7 +723,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     plot_reward_per_episode_series(only_step_rewards_p0, only_step_rewards_p1, plot_title,
          moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
-         dir=plot_path)
+         dir=plot_path, plot_bands=config['plot_reward_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting cumulative full rewards without coin 
@@ -734,7 +734,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     plot_reward_per_episode_series(full_rewards_without_coin_p0, full_rewards_without_coin_p1, plot_title,
          moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
-         dir=plot_path)
+         dir=plot_path, plot_bands=config['plot_reward_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting cumulative full rewards without step 
@@ -745,7 +745,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     plot_reward_per_episode_series(full_rewards_without_step_p0, full_rewards_without_step_p1, plot_title,
          moving_average_window_size=config['plotting_settings']['plot_moving_average_window_size'],
          episode_series_x_axis_plot_range=config['plotting_settings']['reward_time_series_x_axis_plot_range'],  
-         dir=plot_path)
+         dir=plot_path, plot_bands=config['plot_reward_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting evolving win ratio 
@@ -758,7 +758,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
                        plot_title=plot_title,
                        result_type_to_plot="win",
                        episode_series_x_axis_plot_range=config['plotting_settings']['game_result_ratio_x_axis_plot_range'],  
-                       dir=plot_path)
+                       dir=plot_path, plot_bands=config['plot_result_ratio_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting evolving loss ratio 
@@ -771,7 +771,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
                        plot_title=plot_title,
                        result_type_to_plot="loss",
                        episode_series_x_axis_plot_range=config['plotting_settings']['game_result_ratio_x_axis_plot_range'],  
-                       dir=plot_path)
+                       dir=plot_path, plot_bands=config['plot_result_ratio_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Plotting evolving draw ratio 
@@ -784,7 +784,7 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
                        plot_title=plot_title,
                        result_type_to_plot="draw",
                        episode_series_x_axis_plot_range=config['plotting_settings']['game_result_ratio_x_axis_plot_range'],  
-                       dir=plot_path)
+                       dir=plot_path, plot_bands=config['plot_result_ratio_bands'])
     logging.info("Plot saved to %s.png", plot_path)
     
     # Save trajectory logs if enabled.

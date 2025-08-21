@@ -172,15 +172,21 @@ agent_settings:
 # Configures the appearance of the final reward plot.
 # ---------------------------------------------------------------------------
 plotting_settings:
+
+  # If True, plots a shaded 95% confidence interval band around the mean reward.
+  # If False, plots the individual reward curve for each experiment run with low opacity.
+  # The band is recommended for a large number of runs to avoid visual clutter.
+  plot_reward_bands: True
   # The size of the window for the moving average applied to the reward curves.
   # This helps to smooth out the noise and see the underlying learning trend.
   moving_average_window: 100
-  
   # Sets the [xmin, xmax] range for the x-axis on the reward plots.
   reward_time_series_x_axis_plot_range: [9000,10000]
-  
+
+  # If True, plots a 95% confidence interval band for the game result ratios.
+  # If False, plots the individual ratio curve for each run with low opacity.
+  plot_result_ratio_bands: True
   # Defines the episode slice [start, end] to analyze for win/loss/draw ratios.
   episode_range_to_eval: [9899, 9999]
-  
   # Sets the [xmin, xmax] range for the x-axis on the game result ratio plots.
   game_result_ratio_x_axis_plot_range: [9899, 9999]

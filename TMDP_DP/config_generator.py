@@ -71,8 +71,10 @@ BASE_CONFIG: dict[str, Any] = {
         }
     },
     "plotting_settings": {
+        "plot_reward_bands": True,
         "plot_moving_average_window_size": 500,
         "reward_time_series_x_axis_plot_range": [0, 19999],
+        "plot_result_ratio_bands": True,
         "episode_range_to_eval": [19899, 19999],
         "game_result_ratio_x_axis_plot_range": [19899, 19999]
     }

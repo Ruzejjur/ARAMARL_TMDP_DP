@@ -61,9 +61,11 @@ agent_settings:
 
 
 plotting_settings:
+  plot_reward_bands: True
   plot_moving_average_window_size: 500
   reward_time_series_x_axis_plot_range: [0,9999]
 
+  plot_result_ratio_bands: True
   episode_range_to_eval: [9899,9999]
   game_result_ratio_x_axis_plot_range: [9899,9999]
     

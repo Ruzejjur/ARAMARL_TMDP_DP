@@ -12,6 +12,9 @@ Optimization_plan.rtf
 *.txt
 *.tiff
 *.lock
+*.err
+*.out
+*.DS_Store
 
 !config_template.yaml
 

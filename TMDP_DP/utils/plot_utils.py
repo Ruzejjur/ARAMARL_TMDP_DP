@@ -27,50 +27,71 @@ def moving_average(array, moving_average_window_size=3):
     # Divide by window size to obtain the moving average
     return ret[moving_average_window_size - 1:] / moving_average_window_size
 
-def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window_size, episode_series_x_axis_plot_range, dir=None):
+def plot_reward_per_episode_series(reward_series_p0, reward_series_p1, plot_title, moving_average_window_size, episode_series_x_axis_plot_range, dir=None, plot_bands=False):
     """
     Plot smoothed reward trajectories for two agents over multiple experiments.
 
     Parameters:
-        r0ss (list of arrays): Rewards for Agent A across experiments.
-        r1ss (list of arrays): Rewards for Agent B across experiments.
+        reward_series_p0 (list of arrays): Rewards for Agent A across experiments.
+        reward_series_p1 (list of arrays): Rewards for Agent B across experiments.
         plot_title (str): Title of the plot.
         moving_average_window_size(int): Size of right-aligned moving average window.
         episode_series_x_axis_plot_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
         dir (str, optional): If provided, saves the plot to 'dir.png'.
-
-    Returns:
-        None
+        plot_bands (bool, optional): If True, plots a 95% confidence interval band instead of individual runs. Defaults to False.
     """
     # Apply 'ggplot' style
     plt.style.use('ggplot')
-    # Create figure and axis explicitly d
     fig, ax = plt.subplots()
 
-    number_of_experiment = len(r0ss)
+    number_of_experiment = len(reward_series_p0)
     
-    # Keep our own stable labels per line
-    label_map = {}
+    # Common x-axis for all plots
+    x_axis = np.arange(moving_average_window_size - 1, len(reward_series_p0[0]))
+    
+    # Store smoothed series for all runs to calculate bands later
+    smoothed_p0_series = []
+    smoothed_p1_series = []
 
     for i in range(number_of_experiment):
         # Calculate the moving average for the full series
-        p0_reward_series = moving_average(r0ss[i], moving_average_window_size)
-        p1_reward_series = moving_average(r1ss[i], moving_average_window_size)
+        p0_reward_series = moving_average(reward_series_p0[i], moving_average_window_size)
+        p1_reward_series = moving_average(reward_series_p1[i], moving_average_window_size)
         
-        x_axis = np.arange(moving_average_window_size - 1, len(r0ss[i]))
-        line_dm,  = ax.plot(x_axis, p0_reward_series, 'b', alpha=0.05)
-        line_adv, = ax.plot(x_axis, p1_reward_series, 'r', alpha=0.05)
-        label_map[line_dm]  = 'DM'
-        label_map[line_adv] = 'Adversary'
+        smoothed_p0_series.append(p0_reward_series)
+        smoothed_p1_series.append(p1_reward_series)
 
-    p0_average_reward_series = moving_average(np.mean(r0ss, axis=0), moving_average_window_size)
-    p1_average_reward_series = moving_average(np.mean(r1ss, axis=0), moving_average_window_size)
+        if not plot_bands:
+            # If not plotting bands, plot individual low-opacity lines
+            ax.plot(x_axis, p0_reward_series, 'b', alpha=0.05)
+            ax.plot(x_axis, p1_reward_series, 'r', alpha=0.05)
+
+    if plot_bands:
+        # Calculate percentiles on the smoothed data
+        lower_bound_p0 = np.percentile(smoothed_p0_series, 5, axis=0)
+        upper_bound_p0 = np.percentile(smoothed_p0_series, 95, axis=0)
+        ax.fill_between(x_axis, lower_bound_p0, upper_bound_p0, color='b', alpha=0.2)
+        
+        # Plot invisible lines for the cursor
+        ax.plot(x_axis, lower_bound_p0, color='b', alpha=0)
+        ax.plot(x_axis, upper_bound_p0, color='b', alpha=0)
+        
+        lower_bound_p1 = np.percentile(smoothed_p1_series, 5, axis=0)
+        upper_bound_p1 = np.percentile(smoothed_p1_series, 95, axis=0)
+        
+        # Plot invisible lines for the cursor
+        ax.plot(x_axis, lower_bound_p1, color='r', alpha=0)
+        ax.plot(x_axis, upper_bound_p1, color='r', alpha=0)
+        
+        # Plot the shaded confidence interval band
+        ax.fill_between(x_axis, lower_bound_p1, upper_bound_p1, color='r', alpha=0.2)
+        
+    # Calculate and plot the mean of the smoothed series
+    p0_average_reward_series = np.mean(smoothed_p0_series, axis=0)
+    p1_average_reward_series = np.mean(smoothed_p1_series, axis=0)
     
-    x_axis_avg = np.arange(moving_average_window_size - 1, len(np.mean(r0ss, axis=0)))
-    mean_dm_line,  = ax.plot(x_axis_avg, p0_average_reward_series, 'b', alpha=0.5)
-    mean_adv_line, = ax.plot(x_axis_avg, p1_average_reward_series, 'r', alpha=0.5)
-    label_map[mean_dm_line]  = 'DM'
-    label_map[mean_adv_line] = 'Adversary'
+    ax.plot(x_axis, p0_average_reward_series, 'b', alpha=0.8, linewidth=1.5, label='DM Mean')
+    ax.plot(x_axis, p1_average_reward_series, 'r', alpha=0.8, linewidth=1.5, label='Adversary Mean')
 
     ax.set_xlabel('Episode')
     ax.set_ylabel('Cumulative reward per episode')
@@ -80,20 +101,16 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
     # Force the x-axis to use integer ticks
     ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 
-    custom_lines = [Line2D([0], [0], color='b', label='DM'),
-                    Line2D([0], [0], color='r', label='Adversary')]
-    ax.legend(handles=custom_lines)
+    ax.legend()
 
     if dir is not None:
-        # Set figure background to transparent
-        #fig.patch.set_alpha(0.0) # jpeg does not support transparency
         fig.savefig(
             f"{dir}.jpg",
             format='jpeg',
             dpi=1200,
             bbox_inches='tight',
             pil_kwargs={
-                "quality": 90, # values above 95 remove compresion
+                "quality": 90,
                 "optimize": True,
                 "progressive": False
             }
@@ -105,13 +122,12 @@ def plot_reward_per_episode_series(r0ss, r1ss, plot_title, moving_average_window
     @cursor.connect("add")
     def _on_add(sel):
         x, y = sel.target
-        # Use our mapping instead of artist.get_label()
-        name = label_map.get(sel.artist, 'Series')
-        sel.annotation.set_text(f"{name}\nEpisode={int(round(float(x)))}\nReward={float(y):.4f}")
+        label = sel.artist.get_label()
+        sel.annotation.set_text(f"{label}\nEpisode={int(round(float(x)))}\nReward={float(y):.4f}")
 
     plt.show()
         
-def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_type_to_plot, episode_series_x_axis_plot_range, dir=None):
+def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_type_to_plot, episode_series_x_axis_plot_range, dir=None, plot_bands=False):
     """
     Plot result ration trajectories for an agent over multiple experiments.
 
@@ -123,9 +139,7 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
         result_type_to_plot (str): One of 'win', 'loss', 'draw', or 'timeout'.
         episode_series_x_axis_plot_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
         dir (str, optional): If provided, saves the plot to 'dir.png'.
-
-    Returns:
-        None
+        plot_bands (bool, optional): If True, plots a 95% confidence interval band instead of individual runs. Defaults to False.
     """
     # Apply 'ggplot' style
     plt.style.use('ggplot')
@@ -169,14 +183,27 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
         result_ratio = cumulative_results / episode_indices
         all_ratios.append(result_ratio)
         
-        # Plot the ratio for the individual run with high transparency
-        ax.plot(plot_x_indices, result_ratio, 'b', alpha=0.05)
+        if not plot_bands:
+            # Plot the ratio for the individual run with high transparency
+            ax.plot(plot_x_indices, result_ratio, 'b', alpha=0.05)
 
     # Calculate the mean ratio across all experiments
     mean_ratio_series = np.mean(all_ratios, axis=0)
     
     # Plot the averaged line with lower transparency
-    ax.plot(plot_x_indices, mean_ratio_series, 'b', alpha=0.5)
+    ax.plot(plot_x_indices, mean_ratio_series, 'b', alpha=0.8, linewidth=1.5, label=f'DM Mean {result_type_to_plot.capitalize()} Ratio')
+
+    if plot_bands:
+        # Calculate the 5th and 95th percentiles for the confidence interval
+        lower_bound = np.percentile(all_ratios, 5, axis=0)
+        upper_bound = np.percentile(all_ratios, 95, axis=0)
+        
+        # Plot invisible lines for the cursor to attach to
+        ax.plot(plot_x_indices, lower_bound, color='b', alpha=0)
+        ax.plot(plot_x_indices, upper_bound, color='b', alpha=0)
+        
+        # Plot the shaded confidence interval band
+        ax.fill_between(plot_x_indices, lower_bound, upper_bound, color='b', alpha=0.2)
 
     ax.set_xlabel('Episode')
     ax.set_ylabel(f'{result_type_to_plot.capitalize()} Ratio')
@@ -187,8 +214,10 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
     ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 
     # Simplified legend for a single agent's metric
-    custom_lines = [Line2D([0], [0], color='b', label=f'DM {result_type_to_plot} ratio')]
-    ax.legend(handles=custom_lines)
+    # custom_lines = [Line2D([0], [0], color='b', label=f'DM {result_type_to_plot} ratio')]
+    # ax.legend(handles=custom_lines)
+    
+    ax.legend()
 
     if dir is not None:
         fig.savefig(
@@ -208,6 +237,7 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
     @cursor.connect("add")
     def _on_add(sel):
         x, y = sel.target
+        label = sel.artist.get_label()
         sel.annotation.set_text(f"Episode={int(round(x))}\nRatio={y:.4f}")
 
     plt.show()
