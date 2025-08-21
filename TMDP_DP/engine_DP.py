@@ -163,6 +163,9 @@ class CoinGame():
         
         # Evaluate if the intended action is executed or alternative is selected
         # Note: Push action is deterministic
+        if exec_prob >= 1.0:
+            actual_move = intended_move
+            
         if np.random.rand() < exec_prob:
             actual_move = intended_move
         else:
