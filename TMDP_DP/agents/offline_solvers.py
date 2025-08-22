@@ -1,9 +1,10 @@
 import logging
 import numpy as np
+import math
+import multiprocessing
 import copy
 from tqdm.auto import tqdm
 import hashlib
-import logging
 from pathlib import Path 
 import filelock
 
@@ -12,6 +13,7 @@ from typing import Optional
 from .tmdp_dp import LevelK_TMDP_DP_Agent_Stationary
 from .heuristic import ManhattanAgent, ManhattanAgent_Passive
 from .base import LearningAgent
+from engine_DP import CoinGame
 
 # --- Type Aliases for Readability ---
 State = int
@@ -21,6 +23,130 @@ Policy = np.ndarray
 ValueFunction = np.ndarray
 ActionDetails = np.ndarray
 
+def _reset_sim_env_to_state(env_snapshot: CoinGame, obs: State):
+    """
+    Resets a simulation environment instance to a specific state ID.
+
+    It works by reversing the state encoding
+    process defined in the `CoinGame.get_state()` method, using radix decoding
+    to extract player positions and coin statuses from the single integer `obs`.
+
+    The function directly modifies the attributes of the provided `env_snapshot`
+    object in place.
+
+    Args:
+        env_snapshot (CoinGame): The environment instance to be modified. This
+            should be a deterministic copy used only for simulation.
+        obs (State): The integer ID of the target state to set.
+    """
+    # Start by resetting the environment to a clean, default initial state.
+    # This ensures that any attributes not explicitly set by the decoding
+    # process (like step_count) are in a known, valid state.
+    env_snapshot.reset()
+    
+    # --- Radix Decoding ---
+    # Define the bases for the mixed-radix number system used in state encoding.
+    # `base_pos` is the number of possible positions for a single player (N*N).
+    # `base_coll` is the number of states for a single coin collection flag (True/False).
+    base_pos, base_coll = env_snapshot.grid_size**2, 2
+    state_copy = obs
+    
+    # Decode the state integer piece by piece, in the reverse order of encoding.
+    p1_collected_c1 = bool(state_copy % base_coll); state_copy //= base_coll # Player 1 collected coin 1
+    p1_collected_c0 = bool(state_copy % base_coll); state_copy //= base_coll # Player 1 collected coin 0
+    p0_collected_c1 = bool(state_copy % base_coll); state_copy //= base_coll # Player 0 collected coin 1
+    p0_collected_c0 = bool(state_copy % base_coll); state_copy //= base_coll # Player 0 collected coin 0
+    p1_flat = state_copy % base_pos; state_copy //= base_pos      # Player 1 flattened position
+    p0_flat = state_copy                                          # Player 0 flattened position
+    
+    # Convert the 1D flattened player positions back into 2D [row, col] coordinates.
+    env_snapshot.player_0_pos = np.array([p0_flat % env_snapshot.grid_size, p0_flat // env_snapshot.grid_size])
+    env_snapshot.player_1_pos = np.array([p1_flat % env_snapshot.grid_size, p1_flat // env_snapshot.grid_size])
+    
+    # Set the coin collection flags for both players.
+    env_snapshot.player_0_collected_coin0, env_snapshot.player_0_collected_coin1 = p0_collected_c0, p0_collected_c1
+    env_snapshot.player_1_collected_coin0, env_snapshot.player_1_collected_coin1 = p1_collected_c0, p1_collected_c1
+    
+    # Update the global availability of the coins based on the collection flags.
+    # A coin is unavailable if either player has collected it.
+    env_snapshot.coin0_available = not (p0_collected_c0 or p1_collected_c0)
+    env_snapshot.coin1_available = not (p0_collected_c1 or p1_collected_c1)
+
+def _compute_lookup_for_chunk(args: tuple) -> list:
+    """
+    Top-level worker function for parallel lookup table generation.
+
+    This function is designed to be executed in a separate, independent process
+    by a `multiprocessing.Pool`. It receives a "chunk" (a subset) of all
+    states and is responsible for computing the next-state and reward lookups
+    for each state in its assigned chunk.
+
+    Args:
+        args (tuple): A tuple containing all necessary information for the worker:
+            - states_chunk (list[int]): The subset of state indices to process.
+            - env_params (dict): A serializable configuration dictionary used to
+              create a local, deterministic `CoinGame` instance.
+            - player_id (int): The ID of the agent (0 or 1) for whom the rewards
+              are being calculated.
+            - self_actions (np.ndarray): Details of the agent's actions.
+            - opp_actions (np.ndarray): Details of the opponent's actions.
+
+    Returns:
+        list[tuple]: A list where each element is a tuple `(s, s_prime_row, r_row)`,
+                     representing the computed lookup table rows for a single state `s`.
+    """
+    # Initialization
+    # Unpack the arguments tuple for clarity.
+    states_chunk, env_params, player_id, self_actions, opp_actions = args
+    
+    # Create a private, deterministic environment instance for this worker process.
+    env_snapshot = CoinGame(**env_params)
+    
+    # This list will store the results for all states processed by this worker.
+    results_chunk = []
+
+    # Iterate through each state assigned to this worker's chunk.
+    for s in states_chunk:
+        # Pre-allocate arrays to store the results for the current state `s`.
+        s_prime_row = np.zeros((len(self_actions), len(opp_actions)), dtype=int)
+        r_row = np.zeros((len(self_actions), len(opp_actions)), dtype=float)
+
+        # Wrap the simulation in a try-except block to handle
+        # invalid or unreachable states that might cause errors during decoding.
+        try:
+            # Set the local environment to the current state `s`.
+            _reset_sim_env_to_state(env_snapshot, s)
+            
+            # Iterate through every possible pair of EXECUTED actions to find the outcome.
+            for a_self_exec in range(len(self_actions)):
+                for a_opp_exec in range(len(opp_actions)):
+                    # Store the state before the step to ensure we can revert to it.
+                    original_state = env_snapshot.get_state()
+                    
+                    # Ensure the action tuple is in the correct (p0, p1) order
+                    # for the environment's step function.
+                    action_pair = (a_self_exec, a_opp_exec) if player_id == 0 else (a_opp_exec, a_self_exec)
+                    
+                    # Simulate one deterministic step to get the outcome.
+                    s_prime, rewards_vec, *_ = env_snapshot.step(action_pair)
+                    
+                    # Store the resulting next state and the reward for our agent.
+                    s_prime_row[a_self_exec, a_opp_exec] = s_prime
+                    r_row[a_self_exec, a_opp_exec] = rewards_vec[player_id]
+                    
+                    # Reset the environment to its pre-step state
+                    # to ensure the next simulated action pair starts from the same `s`.
+                    _reset_sim_env_to_state(env_snapshot, original_state)
+        except (IndexError, ValueError):
+            # If a state is invalid, simply skip it. The result rows will remain
+            # as arrays of zeros, which is a safe default.
+            pass 
+        
+        # Append the completed lookup rows for state `s` to this worker's results list.
+        results_chunk.append((s, s_prime_row, r_row))
+            
+    # Return the completed list of results for this entire chunk back to the main process.
+    return results_chunk
 
 class MDP_DP_Agent_PerfectModel(LearningAgent):
     """
@@ -194,52 +320,81 @@ class MDP_DP_Agent_PerfectModel(LearningAgent):
     
     def _precompute_lookups(self) -> tuple:
         """
-        Builds lookup tables for next states (s') and rewards (r).
-        
-        This is a one-time, expensive computation that maps every
-        (state, executed_action_self, executed_action_opponent) tuple
-        to its deterministic outcome. This avoids repeated simulation calls
-        during the learning process, significantly speeding up calculations.
+        Builds lookup tables for next states (s') and rewards (r) in parallel.
+
+        This is a one-time, computationally expensive process that maps every
+        (state, executed_action_self, executed_action_opponent) tuple to its
+        deterministic outcome. To significantly accelerate this, the workload is
+        parallelized across all available CPU cores using Python's `multiprocessing`
+        module.
+
+        The overall process is as follows:
+        1. The full set of states is divided into smaller, non-overlapping "chunks".
+        2. A pool of worker processes is created (typically one per CPU core).
+        3. Each worker is assigned one chunk of states and a lightweight copy of the
+        environment's configuration.
+        4. Workers compute their assigned portion of the lookup tables in parallel.
+        5. The main process collects the results from all workers and assembles them
+        into the final, complete lookup tables.
+
+        This parallel approach dramatically reduces the wall-clock time required for
+        agent initialization, especially when the lookup tables are not yet cached.
 
         Returns:
             A tuple containing:
-            - s_prime_lookup (np.ndarray): Table of next states.
-            - r_lookup (np.ndarray): Table of rewards for the current agent.
+            - s_prime_lookup (np.ndarray): Table of next states, with shape
+            (n_states, num_self_actions, num_opponent_actions).
+            - r_lookup (np.ndarray): Table of rewards for the current agent, with shape
+            (n_states, num_self_actions, num_opponent_actions).
         """
-        
         desc_str = f"Pre-computing lookups for DP Agent perfect model (Player {"DM" if self.player_id == 0 else "Adv"})"
         
+        # Pre-allocate the final lookup tables with zeros.
         s_prime_lookup = np.zeros((self.n_states, self.num_self_actions, self.num_opponent_actions), dtype=int)
         r_lookup = np.zeros((self.n_states, self.num_self_actions, self.num_opponent_actions), dtype=float)
 
-        for s in tqdm(range(self.n_states), desc=desc_str):
-            try:
-                # Set the deterministic simulation environment to state 's'
-                self._reset_sim_env_to_state(s)
-            except (IndexError, ValueError):
-                continue # Skip unreachable/invalid states
-            
-            for a_self_exec in range(self.num_self_actions):
-                for a_opp_exec in range(self.num_opponent_actions):
-                    # Save the environment's state to restore it after the step
-                    current_env_state = self.env_snapshot.get_state()
-                    
-                    # The environment engine expects actions in [0, 1] order.
-                    if self.player_id == 0:
-                        action_pair = (a_self_exec, a_opp_exec)
-                    else:
-                        action_pair = (a_opp_exec, a_self_exec)
+        # Prepare Arguments for Worker Processes
+        env_params = {
+            'max_steps': self.env_snapshot.max_steps,
+            'grid_size': self.env_snapshot.grid_size,
+            'enable_push': self.env_snapshot.enable_push,
+            'push_distance': self.env_snapshot.push_distance,
+            'rewards': self.env_snapshot.get_reward_config(),
+            'action_execution_probabilities': [1.0, 1.0] # Deterministic for simulation
+        }
+        
+        # Divide the Workload into Chunks
+        # Determine the optimal number of worker processes based on available CPU cores.
+        num_processes = multiprocessing.cpu_count()
+        # Calculate the number of states each worker should handle. `math.ceil` ensures
+        # all states are covered, even if `n_states` isn't perfectly divisible.
+        chunk_size = math.ceil(self.n_states / num_processes)
+        all_states = range(self.n_states)
+        
+        # Split the full range of states into a list of smaller, non-overlapping lists (chunks).
+        state_chunks = [list(all_states[i:i + chunk_size]) for i in range(0, self.n_states, chunk_size)]
+        
+        # Prepare the final list of tasks, where each task is a tuple of arguments
+        # for the top-level `_compute_lookup_for_chunk` worker function.
+        tasks = [(chunk, env_params, self.player_id, self.self_action_details, self.opponent_action_details) for chunk in state_chunks]
 
-                    # Simulate one step with the specified executed action pair
-                    s_prime, rewards_vec, _, _, _, _, _, _, _ = self.env_snapshot.step(action_pair)
-                    
-                    # Store the resulting next state and the reward for this agent
-                    s_prime_lookup[s, a_self_exec, a_opp_exec] = s_prime
-                    r_lookup[s, a_self_exec, a_opp_exec] = rewards_vec[self.player_id]
-                    
-                    # Restore environment to its original state for the next action pair
-                    self._reset_sim_env_to_state(current_env_state)
-                    
+        # Execute Tasks in Parallel 
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            # `pool.imap_unordered` distributes the tasks to the workers. It returns an
+            # iterator that yields results as they are completed, which can be more
+            # memory-efficient and slightly faster than waiting for all tasks to finish.
+            # `tqdm` provides a progress bar to monitor the completion of chunks.
+            results_from_chunks = list(tqdm(pool.imap_unordered(_compute_lookup_for_chunk, tasks), total=len(tasks), desc=desc_str))
+
+        # Assemble Results
+        # Iterate through the list of results returned by each worker. Each result
+        # is itself a list of tuples `(state, s_prime_row, r_row)`.
+        for chunk in results_from_chunks:
+            for s, s_prime_row, r_row in chunk:
+                # Place the computed rows into the correct slice of the final lookup tables.
+                s_prime_lookup[s] = s_prime_row
+                r_lookup[s] = r_row
+                
         return s_prime_lookup, r_lookup
     
     def _reset_sim_env_to_state(self, obs: State):
