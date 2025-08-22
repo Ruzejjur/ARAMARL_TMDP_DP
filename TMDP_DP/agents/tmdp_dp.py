@@ -2,6 +2,7 @@ import numpy as np
 from numpy.random import choice
 import math
 import multiprocessing
+import os
 import copy
 from typing import cast, Optional
 from tqdm.auto import tqdm
@@ -404,7 +405,25 @@ class _BaseLevelK_TMDP_DP_Agent(LearningAgent):
         
         # Divide the Workload into Chunks
         # Determine the optimal number of worker processes based on available CPU cores.
-        num_processes = multiprocessing.cpu_count()
+        if hasattr(os, "sched_getaffinity"):
+            # We are on a Linux-like system that supports affinity.
+            # Get the number of CPUs we are allowed to use by the OS/scheduler.
+            num_of_available_cores = len(os.sched_getaffinity(0))  # pyright: ignore[reportAttributeAccessIssue]
+            # NOTE: Suppresing platform specific warning
+            
+            # If our affinity is less than the total machine CPUs, it means we are in a
+            # restricted environment (like a SLURM job). We must respect that limit.
+            # Otherwise, we have access to the whole machine, so we apply the "good citizen"
+            # rule and leave a couple of cores free.
+            if num_of_available_cores < multiprocessing.cpu_count():
+                num_processes = num_of_available_cores
+            else:
+                num_processes = max(1, multiprocessing.cpu_count() - 2)
+        else:
+            # We are on another OS (e.g., Windows/macOS) that doesn't have sched_getaffinity.
+            # Fall back to the safe "good citizen" approach for shared systems
+            num_processes = max(1, multiprocessing.cpu_count() - 2)
+            
         # Calculate the number of states each worker should handle. `math.ceil` ensures
         # all states are covered, even if `n_states` isn't perfectly divisible.
         chunk_size = math.ceil(self.n_states / num_processes)
