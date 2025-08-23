@@ -474,9 +474,6 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
     full_rewards_without_step_p0 = []
     full_rewards_without_step_p1 = []
     
-    # Trajectory log initialisation
-    trajectory_logs_all_experiments = []
-    
     # Win, loss and draw array for player 1 initalisation
     game_result_p0 = []
 
@@ -656,9 +653,40 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
 
                 p1.update_epsilon(new_epsilon_agent_p1, new_epsilon_lower_k_p1)
             
+        # Save trajectory log if enabled.
         if log_trajectory:
-            # Append the trajectory logs of this experiment to the total logs
-            trajectory_logs_all_experiments.extend(trajectory_log_single_experiment)
+            # Define structured array
+            trajectory_dtype = np.dtype([
+                ('experiment_num', np.int16), ('episode_num', np.int16), ('step_num', np.int16),
+                ('p0_loc_old_row', np.int8), ('p0_loc_old_col', np.int8),
+                ('p1_loc_old_row', np.int8), ('p1_loc_old_col', np.int8),
+                ('p0_loc_new_row', np.int8), ('p0_loc_new_col', np.int8),
+                ('p1_loc_new_row', np.int8), ('p1_loc_new_col', np.int8),
+                ('coin1_row', np.int8), ('coin1_col', np.int8),
+                ('coin2_row', np.int8), ('coin2_col', np.int8),
+                ('p0_action_move', np.int8), ('p0_action_push', np.int8),
+                ('p1_action_move', np.int8), ('p1_action_push', np.int8),
+                ('p0_reward', np.float32), ('p1_reward', np.float32),
+                ('p0_cum_reward', np.float32), ('p1_cum_reward', np.float32)
+            ])
+
+            # Convert list of logs to structured array
+            # Ensure each row is a tuple to match the dtype structure
+            save_array = np.array(
+                [tuple(row) for row in trajectory_log_single_experiment], 
+                dtype=trajectory_dtype
+            )
+
+            # Save the array as a compressed file
+            traj_path_dir = os.path.join(results_path, 'trajectory_log')
+            
+            os.makedirs(traj_path_dir, exist_ok=True)
+            
+            trajectory_path = os.path.join(traj_path_dir, f'trajectory_log_experiment_{experiment_num}.npz')
+            
+            np.savez_compressed(trajectory_path, trajectory_log_single_experiment=save_array) 
+            
+            logging.info(f"Trajectory log saved to {trajectory_path}. Shape: {save_array.shape}")
         
         full_rewards_p0.append(run_full_rewards_p0)
         full_rewards_p1.append(run_full_rewards_p1)
@@ -786,36 +814,6 @@ def run_experiment(config_file_path: str, base_output_dir: Optional[str] = None,
                        episode_series_x_axis_plot_range=config['plotting_settings']['game_result_ratio_x_axis_plot_range'],  
                        dir=plot_path, plot_bands=config['plotting_settings']['plot_result_ratio_bands'])
     logging.info("Plot saved to %s.png", plot_path)
-    
-    # Save trajectory logs if enabled.
-    if log_trajectory:
-        # Define structured array
-        trajectory_dtype = np.dtype([
-            ('experiment_num', np.int16), ('episode_num', np.int16), ('step_num', np.int16),
-            ('p0_loc_old_row', np.int8), ('p0_loc_old_col', np.int8),
-            ('p1_loc_old_row', np.int8), ('p1_loc_old_col', np.int8),
-            ('p0_loc_new_row', np.int8), ('p0_loc_new_col', np.int8),
-            ('p1_loc_new_row', np.int8), ('p1_loc_new_col', np.int8),
-            ('coin1_row', np.int8), ('coin1_col', np.int8),
-            ('coin2_row', np.int8), ('coin2_col', np.int8),
-            ('p0_action_move', np.int8), ('p0_action_push', np.int8),
-            ('p1_action_move', np.int8), ('p1_action_push', np.int8),
-            ('p0_reward', np.float32), ('p1_reward', np.float32),
-            ('p0_cum_reward', np.float32), ('p1_cum_reward', np.float32)
-        ])
-
-        # Convert list of logs to structured array
-        # Ensure each row is a tuple to match the dtype structure
-        save_array = np.array(
-            [tuple(row) for row in trajectory_logs_all_experiments], 
-            dtype=trajectory_dtype
-        )
-
-        # Save the array as a compressed file
-        traj_path = os.path.join(results_path, 'trajectory_log.npz')
-        np.savez_compressed(traj_path, trajectory_logs_all_experiments=save_array) # I suggest a simpler key like 'trajectory'
-        
-        logging.info(f"Trajectory log saved to {traj_path}. Shape: {save_array.shape}")
     
     # Save accumulated reward data for each experiment
     
