@@ -36,10 +36,10 @@ logging.basicConfig(
 BASE_CONFIG: dict[str, Any] = {
     "experiment_settings": {
         # The 'name' will be generated automatically for each matchup.
-        "num_runs": 6,
+        "num_runs": 100,
         "num_episodes": 20000,
         "run_seed": 42,
-        "results_dir": "results/article_configs/push_false" # Used only if base output is not defined
+        "results_dir": "results/article_configs/" # Used only if base output is not defined
                                                             #(in case of the CoinGame_runner.py and CoinGame_parallel_runner.py the output is defined)
     },
     "environment_settings": {
@@ -61,9 +61,9 @@ BASE_CONFIG: dict[str, Any] = {
                 "coin_reward_delta": [0.0, 0.0],
                 "coin_steal_penalty_delta": [0.0, 0.0],
                 "contested_coin_penalty_delta": [0.0, 0.0],
-                "win_reward": [10.0, 10.0],
-                "loss_penalty": [-10.0, -10.0],
-                "draw_penalty": [0.0, 0.0],
+                "win_reward": [5.0, 5.0],
+                "loss_penalty": [-0.1, -0.1],
+                "draw_penalty": [-0.1, -0.1],
                 "timeout_penalty_delta": [0.0, 0.0],
                 "timeout_lead_bonus_delta": [0.0, 0.0],
                 "timeout_trail_penalty_delta": [0.0, 0.0]
@@ -72,7 +72,7 @@ BASE_CONFIG: dict[str, Any] = {
     },
     "plotting_settings": {
         "plot_reward_bands": True,
-        "plot_moving_average_window_size": 500,
+        "plot_moving_average_window_size": 1,
         "reward_time_series_x_axis_plot_range": [0, 19999],
         "plot_result_ratio_bands": True,
         "episode_range_to_eval": [19899, 19999],
@@ -90,7 +90,7 @@ AGENT_PROFILES = {
         "class": "IndQLearningAgent",
         "params": {
             "gamma": 0.95,
-            "learning_rate": 0.7,
+            "learning_rate": 0.5,
             "epsilon": 0.05,
             "initial_Q_value": 0.0
         },
@@ -100,7 +100,7 @@ AGENT_PROFILES = {
         "class": "LevelKQAgent",
         "params": {
             "gamma": 0.95,
-            "learning_rate": 0.7,
+            "learning_rate": 0.5,
             "epsilon": 0.05,
             "k": 1,
             "lower_level_k_epsilon": 0,
@@ -112,7 +112,7 @@ AGENT_PROFILES = {
         "class": "LevelK_MDP_DP_Agent_Stationary",
         "params": {
             "gamma": 0.95,
-            "epsilon": 0.05,
+            "epsilon": 0.0,
             "k": 1,
             "lower_level_k_epsilon": 0,
             "initial_V_value": 0.0
@@ -123,7 +123,7 @@ AGENT_PROFILES = {
         "class": "LevelK_MDP_DP_Agent_Dynamic",
         "params": {
             "gamma": 0.95,
-            "epsilon": 0.05,
+            "epsilon": 0.0,
             "k": 1,
             "lower_level_k_epsilon": 0,
             "initial_V_value": 0.0
@@ -134,7 +134,7 @@ AGENT_PROFILES = {
         "class": "LevelK_TMDP_DP_Agent_Stationary",
         "params": {
             "gamma": 0.95,
-            "epsilon": 0.05,
+            "epsilon": 0.0,
             "k": 1,
             "lower_level_k_epsilon": 0,
             "initial_V_value": 0.0
@@ -145,7 +145,7 @@ AGENT_PROFILES = {
         "class": "LevelK_TMDP_DP_Agent_Dynamic",
         "params": {
             "gamma": 0.95,
-            "epsilon": 0.05,
+            "epsilon": 0.0,
             "k": 1,
             "lower_level_k_epsilon": 0,
             "initial_V_value": 0.0
@@ -187,36 +187,36 @@ AGENT_PROFILES = {
 # =============================================================================
 MATCHUPS = [
     # LevelK_MDP_DP_Dynamic vs. X
-    ("LevelK_MDP_DP_Agent_Dynamic", "IndQLearningAgent"),
-    ("LevelK_MDP_DP_Agent_Dynamic", "LevelKQAgent"),
-    ("LevelK_MDP_DP_Agent_Dynamic", "ManhattanAgent_Passive"),
+    # ("LevelK_MDP_DP_Agent_Dynamic", "IndQLearningAgent"),
+    # ("LevelK_MDP_DP_Agent_Dynamic", "LevelKQAgent"),
+    # ("LevelK_MDP_DP_Agent_Dynamic", "ManhattanAgent_Passive"),
     # ("LevelK_MDP_DP_Agent_Dynamic", "ManhattanAgent"), # This matchup is only viable when push is set to True!
-    ("LevelK_MDP_DP_Agent_Dynamic", "LevelK_MDP_DP_Agent_Dynamic"),
+    # ("LevelK_MDP_DP_Agent_Dynamic", "LevelK_MDP_DP_Agent_Dynamic"),
 
     # LevelK_MDP_DP_Stationary vs. X
-    ("LevelK_MDP_DP_Agent_Stationary", "IndQLearningAgent"),
-    ("LevelK_MDP_DP_Agent_Stationary", "LevelKQAgent"),
-    ("LevelK_MDP_DP_Agent_Stationary", "ManhattanAgent_Passive"),
+    # ("LevelK_MDP_DP_Agent_Stationary", "IndQLearningAgent"),
+    # ("LevelK_MDP_DP_Agent_Stationary", "LevelKQAgent"),
+    # ("LevelK_MDP_DP_Agent_Stationary", "ManhattanAgent_Passive"),
     # ("LevelK_MDP_DP_Agent_Stationary", "ManhattanAgent"), # This matchup is only viable when push is set to True!
-    ("LevelK_MDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Stationary"),
-    ("LevelK_MDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Dynamic"),
+    # ("LevelK_MDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Stationary"),
+    # ("LevelK_MDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Dynamic"),
 
     # LevelK_TMDP_DP_Dynamic vs. X
     ("LevelK_TMDP_DP_Agent_Dynamic", "IndQLearningAgent"),
     ("LevelK_TMDP_DP_Agent_Dynamic", "LevelKQAgent"),
     ("LevelK_TMDP_DP_Agent_Dynamic", "ManhattanAgent_Passive"),
     # ("LevelK_TMDP_DP_Agent_Dynamic", "ManhattanAgent"), # This matchup is only viable when push is set to True!
-    ("LevelK_TMDP_DP_Agent_Dynamic", "LevelK_MDP_DP_Agent_Dynamic"),
-    ("LevelK_TMDP_DP_Agent_Dynamic", "LevelK_TMDP_DP_Agent_Dynamic"),
+    # ("LevelK_TMDP_DP_Agent_Dynamic", "LevelK_MDP_DP_Agent_Dynamic"),
+    # ("LevelK_TMDP_DP_Agent_Dynamic", "LevelK_TMDP_DP_Agent_Dynamic"),
     
     # LevelK_TMDP_DP_Stationary vs. X
     ("LevelK_TMDP_DP_Agent_Stationary", "IndQLearningAgent"),
     ("LevelK_TMDP_DP_Agent_Stationary", "LevelKQAgent"),
     ("LevelK_TMDP_DP_Agent_Stationary", "ManhattanAgent_Passive"),
     # ("LevelK_TMDP_DP_Agent_Stationary", "ManhattanAgent"), # This matchup is only viable when push is set to True!
-    ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Stationary"),
+    # ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_MDP_DP_Agent_Stationary"),
     ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_TMDP_DP_Agent_Dynamic"),
-    ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_TMDP_DP_Agent_Stationary"),
+    # ("LevelK_TMDP_DP_Agent_Stationary", "LevelK_TMDP_DP_Agent_Stationary"),
     
     # LevelKQAgent vs. X
     ("LevelKQAgent", "IndQLearningAgent"),
