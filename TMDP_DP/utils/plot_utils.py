@@ -27,7 +27,7 @@ def moving_average(array, moving_average_window_size=3):
     # Divide by window size to obtain the moving average
     return ret[moving_average_window_size - 1:] / moving_average_window_size
 
-def plot_reward_per_episode_series(reward_series_p0, reward_series_p1, plot_title, moving_average_window_size, episode_series_x_axis_plot_range, dir=None, plot_bands=False):
+def plot_reward_per_episode_series(reward_series_p0, reward_series_p1, plot_title, moving_average_window_size, episode_series_x_axis_plot_range, dir=None, plot_bands_type='None'):
     """
     Plot smoothed reward trajectories for two agents over multiple experiments.
 
@@ -38,7 +38,10 @@ def plot_reward_per_episode_series(reward_series_p0, reward_series_p1, plot_titl
         moving_average_window_size(int): Size of right-aligned moving average window.
         episode_series_x_axis_plot_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
         dir (str, optional): If provided, saves the plot to 'dir.png'.
-        plot_bands (bool, optional): If True, plots a 95% confidence interval band instead of individual runs. Defaults to False.
+        plot_bands_type (str): One of 
+                                - Percentile: Plotting 95% quantile bands
+                                - SEM: Standard Error of the Mean 95% confidence interval
+                                - None: Plot only mean
     """
     # Apply 'ggplot' style
     plt.style.use('ggplot')
@@ -61,12 +64,16 @@ def plot_reward_per_episode_series(reward_series_p0, reward_series_p1, plot_titl
         smoothed_p0_series.append(p0_reward_series)
         smoothed_p1_series.append(p1_reward_series)
 
-        if not plot_bands:
+        if not plot_bands_type:
             # If not plotting bands, plot individual low-opacity lines
             ax.plot(x_axis, p0_reward_series, 'b', alpha=0.05)
             ax.plot(x_axis, p1_reward_series, 'r', alpha=0.05)
+            
+    # Calculate and plot the mean of the smoothed series
+    p0_average_reward_series = np.mean(smoothed_p0_series, axis=0)
+    p1_average_reward_series = np.mean(smoothed_p1_series, axis=0)
 
-    if plot_bands:
+    if plot_bands_type == 'Percentile':
         # Calculate percentiles on the smoothed data
         lower_bound_p0 = np.percentile(smoothed_p0_series, 5, axis=0)
         upper_bound_p0 = np.percentile(smoothed_p0_series, 95, axis=0)
@@ -85,10 +92,37 @@ def plot_reward_per_episode_series(reward_series_p0, reward_series_p1, plot_titl
         
         # Plot the shaded confidence interval band
         ax.fill_between(x_axis, lower_bound_p1, upper_bound_p1, color='r', alpha=0.2)
+    elif plot_bands_type == 'SEM':
+        # --- Player 0 Bands ---
+        # Calculate the standard deviation across runs for each episode
+        std_dev_p0 = np.std(smoothed_p0_series, axis=0)
+        # Calculate the standard error of the mean
+        std_err_p0 = std_dev_p0 / np.sqrt(number_of_experiment)
+        # Calculate the 95% confidence interval bounds (1.96 is the z-score for 95%)
+        lower_bound_p0 = p0_average_reward_series - 1.96 * std_err_p0
+        upper_bound_p0 = p0_average_reward_series + 1.96 * std_err_p0
         
-    # Calculate and plot the mean of the smoothed series
-    p0_average_reward_series = np.mean(smoothed_p0_series, axis=0)
-    p1_average_reward_series = np.mean(smoothed_p1_series, axis=0)
+        ax.fill_between(x_axis, lower_bound_p0, upper_bound_p0, color='b', alpha=0.2)
+        
+        # Plot invisible lines for the cursor to attach to
+        ax.plot(x_axis, lower_bound_p0, color='b', alpha=0)
+        ax.plot(x_axis, upper_bound_p0, color='b', alpha=0)
+        
+        # --- Player 1 Bands ---
+        std_dev_p1 = np.std(smoothed_p1_series, axis=0)
+        std_err_p1 = std_dev_p1 / np.sqrt(number_of_experiment)
+        lower_bound_p1 = p1_average_reward_series - 1.96 * std_err_p1
+        upper_bound_p1 = p1_average_reward_series + 1.96 * std_err_p1
+
+        ax.fill_between(x_axis, lower_bound_p1, upper_bound_p1, color='r', alpha=0.2)
+
+        # Plot invisible lines for the cursor
+        ax.plot(x_axis, lower_bound_p1, color='r', alpha=0)
+        ax.plot(x_axis, upper_bound_p1, color='r', alpha=0)
+    elif plot_bands_type == 'None':
+        pass
+    else: 
+        raise ValueError("Invalid plot_bands_type. Use 'Percentile', 'SEM', or 'None'.")
     
     ax.plot(x_axis, p0_average_reward_series, 'b', alpha=0.8, linewidth=1.5, label='DM Mean')
     ax.plot(x_axis, p1_average_reward_series, 'r', alpha=0.8, linewidth=1.5, label='Adversary Mean')
@@ -127,7 +161,7 @@ def plot_reward_per_episode_series(reward_series_p0, reward_series_p1, plot_titl
 
     plt.show()
         
-def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_type_to_plot, episode_series_x_axis_plot_range, dir=None, plot_bands=False):
+def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_type_to_plot, episode_series_x_axis_plot_range, dir=None, plot_bands_type='None'):
     """
     Plot result ration trajectories for an agent over multiple experiments.
 
@@ -139,7 +173,10 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
         result_type_to_plot (str): One of 'win', 'loss', 'draw', or 'timeout'.
         episode_series_x_axis_plot_range (list/tuple): A list [xmin, xmax] to set the x-axis view.
         dir (str, optional): If provided, saves the plot to 'dir.png'.
-        plot_bands (bool, optional): If True, plots a 95% confidence interval band instead of individual runs. Defaults to False.
+        plot_bands_type (str): One of 
+                                - Percentile: Plotting 95% quantile bands
+                                - SEM: Standard Error of the Mean 95% confidence interval
+                                - None: Plot only mean
     """
     # Apply 'ggplot' style
     plt.style.use('ggplot')
@@ -183,7 +220,7 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
         result_ratio = cumulative_results / episode_indices
         all_ratios.append(result_ratio)
         
-        if not plot_bands:
+        if not plot_bands_type:
             # Plot the ratio for the individual run with high transparency
             ax.plot(plot_x_indices, result_ratio, 'b', alpha=0.05)
 
@@ -193,7 +230,7 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
     # Plot the averaged line with lower transparency
     ax.plot(plot_x_indices, mean_ratio_series, 'b', alpha=0.8, linewidth=1.5, label=f'DM Mean {result_type_to_plot.capitalize()} Ratio')
 
-    if plot_bands:
+    if plot_bands_type == 'Percentile':
         # Calculate the 5th and 95th percentiles for the confidence interval
         lower_bound = np.percentile(all_ratios, 5, axis=0)
         upper_bound = np.percentile(all_ratios, 95, axis=0)
@@ -204,6 +241,27 @@ def plot_result_ration(result_series, episode_range_to_eval, plot_title, result_
         
         # Plot the shaded confidence interval band
         ax.fill_between(plot_x_indices, lower_bound, upper_bound, color='b', alpha=0.2)
+        
+    elif plot_bands_type == 'SEM':
+        # --- Player 0 Bands ---
+        # Calculate the standard deviation across runs for each episode
+        std_dev_p0 = np.std(all_ratios, axis=0)
+        # Calculate the standard error of the mean
+        std_err_p0 = std_dev_p0 / np.sqrt(num_episodes)
+        # Calculate the 95% confidence interval bounds (1.96 is the z-score for 95%)
+        lower_bound_p0 = mean_ratio_series - 1.96 * std_err_p0
+        upper_bound_p0 = mean_ratio_series + 1.96 * std_err_p0
+        
+        ax.fill_between(plot_x_indices, lower_bound_p0, upper_bound_p0, color='b', alpha=0.2)
+        
+        # Plot invisible lines for the cursor to attach to
+        ax.plot(plot_x_indices, lower_bound_p0, color='b', alpha=0)
+        ax.plot(plot_x_indices, upper_bound_p0, color='b', alpha=0)
+    
+    elif plot_bands_type == 'None':
+        pass
+    else:
+        raise ValueError("Invalid plot_bands_type. Use 'Percentile', 'SEM', or 'None'.")
 
     ax.set_xlabel('Episode')
     ax.set_ylabel(f'{result_type_to_plot.capitalize()} Ratio')
@@ -352,7 +410,8 @@ def animate_trajectory_from_log(trajectory_episode_array, grid_size=4, fps=4, dp
     
     # Render and save the last frame as PNG with transparent background
     # update(len(trajectory_episode_array)) 
-    # fig.patch.set_alpha(0.0)  # Make background transparent
-    # fig.savefig("Coin_game_example.png", dpi=1000, transparent=False, bbox_inches='tight')
+    update(0) 
+    #fig.patch.set_alpha(0.0)  # Make background transparent
+    fig.savefig("Coin_game_example.png", dpi=1200, transparent=False, bbox_inches='tight')
     
     plt.close(fig)

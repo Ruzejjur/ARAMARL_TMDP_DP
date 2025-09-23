@@ -71,10 +71,11 @@ BASE_CONFIG: dict[str, Any] = {
         }
     },
     "plotting_settings": {
-        "plot_reward_bands": True,
+        
+        "plot_reward_bands_type": "SEM", # One of 'Percentile', 'SEM', 'None',
         "plot_moving_average_window_size": 1,
         "reward_time_series_x_axis_plot_range": [0, 19999],
-        "plot_result_ratio_bands": True,
+        "plot_result_ratio_bands_type": "SEM", # One of 'Percentile', 'SEM', 'None'
         "episode_range_to_eval": [19899, 19999],
         "game_result_ratio_x_axis_plot_range": [19899, 19999]
     }
@@ -222,7 +223,7 @@ MATCHUPS = [
     ("LevelKQAgent", "IndQLearningAgent"),
 
     # Offline Solvers vs. Heuristics
-    ("MDP_DP_Agent_PerfectModel", "ManhattanAgent_Passive"),
+    # ("MDP_DP_Agent_PerfectModel", "ManhattanAgent_Passive"),
     # ("MDP_DP_Agent_PerfectModel", "ManhattanAgent"), # This matchup is only viable when push is set to True!
     ("TMDP_DP_Agent_PerfectModel", "ManhattanAgent_Passive"),
     # ("TMDP_DP_Agent_PerfectModel", "ManhattanAgent"), # This matchup is only viable when push is set to True!
